@@ -6,7 +6,6 @@ local core_camera = require('\\lua\\ge\\extensions\\core\\camera.lua')
 local sensors = require('\\lua\\vehicle\\sensors.lua')
 
 local M = {}
-M.__index = M
 print("Arcade script loaded :brain:")
 -- Utility function to constrain a value(val) between two defined limits, the lo(wer)Bound, and hi(gher)Bound
 --[[
