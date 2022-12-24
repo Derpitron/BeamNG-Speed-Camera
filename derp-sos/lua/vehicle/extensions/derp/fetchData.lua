@@ -8,9 +8,12 @@
 local M = {}
 
 --Get vehicle data. Runs every frame
-local function onUpdate(dtSim, dtRaw)
+local function updateGFX(dtSim, dtRaw)
+  if playerInfo.anyPlayerSeated then return end
+
   local data = {}
   data.vel = vec3(obj:getVelocity())
+
   --Get vehicle sensors data
   data.sensors = {}
   data.sensors.gx2 = sensors.gx2
@@ -18,9 +21,9 @@ local function onUpdate(dtSim, dtRaw)
   data.sensors.gz2 = sensors.gz2
 
   --Send data to GameEngine
-  obj:queueGameEngineLua("vehData=" .. serialize(data))
+  obj:queueGameEngineLua("getVehData("..serialize(data)..")")
 end
 
-M.onUpdate = onUpdate
+M.onUpdate = updateGFX
 
 return M

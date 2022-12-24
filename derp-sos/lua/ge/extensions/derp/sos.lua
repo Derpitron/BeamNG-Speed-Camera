@@ -17,6 +17,14 @@ local function constrain(lo, var, up)
   return math.max(math.min(var, up), lo)
 end
 
+
+-- Gets vehicle data from vehicle lua
+local vehData = {}
+
+local function getVehData(data)
+  vehData = data
+end
+
 -- Runs every frame
 local function onUpdate(dtSim, dtRaw)
   print("TheFunctionTest300")
@@ -68,5 +76,6 @@ end
 
 M.constrain = constrain
 M.onUpdate = onUpdate
+M.getVehData = getVehData
 
 return M
