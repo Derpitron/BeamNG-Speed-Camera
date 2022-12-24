@@ -5,10 +5,10 @@
 -- Sense of Speed
 -- Author: Derpitron
 
-local sensors = require("sensors")
+-- local sensors = require("lua/vehicle/sensors.lua")
 
 local M = {}
-M.__index = M
+M.dependencies = {"core_camera", "core_vehicle_manager"}
 
 print("theRealTest200")
 
@@ -17,38 +17,56 @@ local function constrain(lo, var, up)
   return math.max(math.min(var, up), lo)
 end
 
-function M:update(data, dtReal, dtSim)
-  -- Recieve camera data
-  local camData = data
-  -- Recieve g-force sensor data
-  local gx2 = sensors.gx2
-  local gy2 = sensors.gy2
-  local gz2 = sensors.gz2
+-- Runs every frame
+local function onUpdate(dtSim, dtRaw)
+  print("TheFunctionTest300")
 
-  -- Set default values for additional Pos(ition), Rot(ation), and FOV(Field of View) values
-  local newPos = vec3(0, 0, 0)
-  local newRot = vec3(0, 0, 0)
-  local newFOV = 0
+  --DATA FETCHING:
+  -- Get current vehicle's ID
+  local vehID = be:getPlayerVehicleID(0)
 
-  -- ADDITIONAL CAMERA POSITION:
-  -- Coefficients for limiting g-force camera position.
-  -- TODO: Get coefficient values from user settings app
-  local PosYCoeff = 0.95
-  local PosZCoeff = 0.95
+  -- Get the current camera's name
+  local activeCam = core_camera.getActiveCamName()
 
-  -- Additional camera position based on g forces
-  -- TODO: Get constraint values from user settings app
-  newPos = {
-    0,
-    PosYCoeff * constrain(-1.3, gy2 ,1.3),
-    PosZCoeff * constrain(-1.3, gz2 - 1 ,1.3)
-  }
+  if activeCam == 'orbit' and vehData then
+
+    -- Get orbit camera data
+    local camData = core_camera.getCameraDataById(vehID)['orbit']
+
+    -- Recieve g-force sensor data. Note: vehData (should) be assigned from fetchData.lua if everything is set up properly.
+    local gx2 = vehData.sensors.gx2
+    local gy2 = vehData.sensors.gy2
+    local gz2 = vehData.sensors.gz2
+
+
+    --SETTING UP VARIABLES:
+    -- Additional Position
+    local addPos = vec3(0, 0, 0)
+    -- Additional Rotation
+    local addRot = vec3(0, 0, 0)
+    -- Additional Field of View
+    local addFOV = 0
+
+    -- Coefficients for limiting g-force camera position.
+    -- TODO: Get constraint values from user settings app
+    local PosYCoeff = 0.95
+    local PosZCoeff = 0.95
+
+
+    -- ADDITIONAL CAMERA POSITION CALCULATION:
+    -- Additional camera position based on g forces
+    addPos = {
+      0,
+      PosYCoeff * constrain(-1.3, gy2 ,1.3),
+      PosZCoeff * constrain(-1.3, gz2 - 1 ,1.3)
+    }
+
+    core_camera.setOffset(vehID, addPos)
+  end
 
 end
 
-return function(...)
-  local o = ... or {}
-  setmetatable(o, M)
-  o:init()
-  return o
-end
+M.constrain = constrain
+M.onUpdate = onUpdate
+
+return M
