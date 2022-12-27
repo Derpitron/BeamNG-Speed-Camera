@@ -9,6 +9,8 @@
 
 local M = {}
 M.dependencies = {"core_camera", "core_vehicle_manager"}
+local lpack = require('lpack')
+
 
 --print("theRealTest200")
 
@@ -20,8 +22,8 @@ end
 
 -- Gets vehicle data from vehicle lua
 local vehData = {}
-local function getVehData(data)
-  vehData = data
+function GetVehData(data)
+  vehData = lpack.decode(data)
 end
 
 -- Runs every frame
@@ -80,6 +82,6 @@ end
 -- Export module functions
 M.constrain = constrain
 M.onUpdate = onUpdate
-M.getVehData = getVehData
+M.GetVehData = GetVehData
 
 return M

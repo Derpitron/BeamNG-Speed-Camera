@@ -6,13 +6,12 @@
 -- Author: Derpitron
 
 local M = {}
+local lpack = require('lpack')
 
 print("TheVLuaTest400")
 
 --Get vehicle data. Runs every frame
 local function updateGFX(dt)
-
-  print("TheVLuaFuncTest500")
 
   local data = {}
   data.vel = vec3(obj:getVelocity())
@@ -24,7 +23,7 @@ local function updateGFX(dt)
   data.sensors.gz2 = sensors.gz2
 
   --Send data to GameEngine
-  obj:queueGameEngineLua("getVehData("..serialize(data)..")")
+  obj:queueGameEngineLua(string.format("GetVehData(%q)", lpack.encode(data)))
 end
 
 M.updateGFX = updateGFX
