@@ -7,9 +7,12 @@
 
 local M = {}
 
+print("TheVLuaTest400")
+
 --Get vehicle data. Runs every frame
-local function updateGFX(dtSim, dtRaw)
-  if playerInfo.anyPlayerSeated then return end
+local function updateGFX(dt)
+
+  print("TheVLuaFuncTest500")
 
   local data = {}
   data.vel = vec3(obj:getVelocity())
@@ -24,6 +27,6 @@ local function updateGFX(dtSim, dtRaw)
   obj:queueGameEngineLua("getVehData("..serialize(data)..")")
 end
 
-M.onUpdate = updateGFX
+M.updateGFX = updateGFX
 
 return M

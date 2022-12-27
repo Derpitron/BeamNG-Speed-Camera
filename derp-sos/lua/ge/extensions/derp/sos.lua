@@ -10,7 +10,7 @@
 local M = {}
 M.dependencies = {"core_camera", "core_vehicle_manager"}
 
-print("theRealTest200")
+--print("theRealTest200")
 
 -- Constrain the value of var between lo(wer bound) and up(per bound)
 local function constrain(lo, var, up)
@@ -20,14 +20,13 @@ end
 
 -- Gets vehicle data from vehicle lua
 local vehData = {}
-
 local function getVehData(data)
   vehData = data
 end
 
 -- Runs every frame
 local function onUpdate(dtSim, dtRaw)
-  print("TheFunctionTest300")
+  --print("TheFunctionTest300")
 
   --DATA FETCHING:
   -- Get current vehicle's ID
@@ -36,10 +35,14 @@ local function onUpdate(dtSim, dtRaw)
   -- Get the current camera's name
   local activeCam = core_camera.getActiveCamName()
 
-  if activeCam == 'orbit' and vehData then
+  -- Used for checking whether a table is empty.
+  -- Taken from: https://stackoverflow.com/a/1252776/19195633
+  local next = next
+  -- If the active camera is orbit and vehData is NOT empty
+  if activeCam == 'orbit' and next(vehData) then
 
     -- Get orbit camera data
-    local camData = core_camera.getCameraDataById(vehID)['orbit']
+    --local camData = core_camera.getCameraDataById(vehID)['orbit']
 
     -- Recieve g-force sensor data. Note: vehData (should) be assigned from fetchData.lua if everything is set up properly.
     local gx2 = vehData.sensors.gx2
@@ -74,6 +77,7 @@ local function onUpdate(dtSim, dtRaw)
 
 end
 
+-- Export module functions
 M.constrain = constrain
 M.onUpdate = onUpdate
 M.getVehData = getVehData
