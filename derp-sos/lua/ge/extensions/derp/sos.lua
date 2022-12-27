@@ -70,8 +70,8 @@ local function onUpdate(dtSim, dtRaw)
     -- Additional camera position based on g forces
     addPos = {
       0,
-      PosYCoeff * constrain(-1.3, gy2 ,1.3),
-      PosZCoeff * constrain(-1.3, gz2 - 1 ,1.3)
+      PosYCoeff * constrain(-1.3, (-1 * gy2) ,1.3),
+      PosZCoeff * constrain(-1.3, (-1 * (gz2 - 1)) ,1.3)
     }
 
     core_camera.setOffset(vehID, addPos)
