@@ -108,19 +108,11 @@ local function onUpdate(dtSim, dtRaw)
 
     -- ADDITIONAL CAMERA POSITION CALCULATION:
     -- Additional camera position based on g forces
-    --addPos = {
-    --  0,
-    --  math.min(1, vehData.vel:length()/100),
-    --  0
-    --}
-
-    --core_camera.setOffset(vehID, addPos)
-    --core_camera.setDefaultRotation(vehID, )
-
-    --print("defaultRot : ", camData.defaultRotation)
-    --print("defaultPos : ", serialize(camData.pos))
-    --print("targetPos  : ", serialize(camData.targetPos))
-    --print("defaultFOV : ", camData.fov)
+    addPos = {
+      0,
+      PosYCoeff * constrain(-1.3, (-1 * gy2) ,1.3),
+      PosZCoeff * constrain(-1.3, (-1 * (gz2 - 1)) ,1.3)
+    }
 
   end
 
