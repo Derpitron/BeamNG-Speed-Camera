@@ -21,6 +21,10 @@ local function updateGFX(dt)
   data.sensors.gx2 = sensors.gx2
   data.sensors.gy2 = sensors.gy2
   data.sensors.gz2 = sensors.gz2
+  
+  --Get vehicle direction vectors
+  data.dirVec = obj:getDirectionVector()
+  data.dirVecUp = obj:getDirectionVectorUp()
 
   --Send data to GameEngine
   obj:queueGameEngineLua(string.format("GetVehData(%q)", lpack.encode(data)))

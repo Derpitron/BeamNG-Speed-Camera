@@ -44,12 +44,14 @@ local function onUpdate(dtSim, dtRaw)
   if activeCam == 'orbit' and next(vehData) then
 
     -- Get orbit camera data
-    --local camData = core_camera.getCameraDataById(vehID)['orbit']
+    local camData = core_camera.getCameraDataById(vehID)['orbit']
 
-    -- Recieve g-force sensor data. Note: vehData (should) be assigned from fetchData.lua if everything is set up properly.
+    -- Recieve vehicle data. Note: vehData (should) be assigned from fetchData.lua if everything is set up properly.
     local gx2 = vehData.sensors.gx2
     local gy2 = vehData.sensors.gy2
     local gz2 = vehData.sensors.gz2
+    local dirVec = vehData.dirVec
+    local dirVecUp = vehData.dirVecUp
 
 
     --SETTING UP VARIABLES:
@@ -60,21 +62,66 @@ local function onUpdate(dtSim, dtRaw)
     -- Additional Field of View
     local addFOV = 0
 
+    --core_camera.setDefaultRotation(vehID, vec3(0, -13, 0))
+    --addPos = {
+    --  0,
+    --  dirVec   * gy2 * 100000,
+    --  dirVecUp * gz2 * 100000
+    --}
+
+    --addRot = {
+    --  -1 * gx2/5,
+    --  -1 * gy2/5,
+    --  -1 * gz2/5
+    --}
+
+    --core_camera.setRotation(vehID, addRot)
+    --core_camera.setOffset(vehID, addPos)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     -- Coefficients for limiting g-force camera position.
     -- TODO: Get constraint values from user settings app
-    local PosYCoeff = 0.95
-    local PosZCoeff = 0.95
+    -- local PosYCoeff = 0.95
+    -- local PosZCoeff = 0.95
 
 
     -- ADDITIONAL CAMERA POSITION CALCULATION:
     -- Additional camera position based on g forces
-    addPos = {
-      0,
-      PosYCoeff * constrain(-1.3, (-1 * gy2) ,1.3),
-      PosZCoeff * constrain(-1.3, (-1 * (gz2 - 1)) ,1.3)
-    }
+    --addPos = {
+    --  0,
+    --  math.min(1, vehData.vel:length()/100),
+    --  0
+    --}
 
-    core_camera.setOffset(vehID, addPos)
+    --core_camera.setOffset(vehID, addPos)
+    --core_camera.setDefaultRotation(vehID, )
+
+    --print("defaultRot : ", camData.defaultRotation)
+    --print("defaultPos : ", serialize(camData.pos))
+    --print("targetPos  : ", serialize(camData.targetPos))
+    --print("defaultFOV : ", camData.fov)
+
   end
 
 end
