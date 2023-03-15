@@ -11,116 +11,65 @@ local M = {}
 M.dependencies = {"core_camera", "core_vehicle_manager"}
 local lpack = require('lpack')
 
-
---print("theRealTest200")
-
 -- Constrain the value of var between lo(wer bound) and up(per bound)
-local function constrain(lo, var, up)
+local function clamp(lo, var, up)
   return math.max(math.min(var, up), lo)
 end
 
-
 -- Gets vehicle data from vehicle lua
-local vehData = {}
-function GetVehData(data)
-  vehData = lpack.decode(data)
+local data = {}
+function GetVehicleData(inputData)
+  data = lpack.decode(inputData)
 end
 
 -- Runs every frame
 local function onUpdate(dtSim, dtRaw)
-  --print("TheFunctionTest300")
-
-  --DATA FETCHING:
   -- Get current vehicle's ID
-  local vehID = be:getPlayerVehicleID(0)
 
-  -- Get the current camera's name
-  local activeCam = core_camera.getActiveCamName()
+  -- Get current active camera's name
+  local activeCamName = core_camera.getActiveCamName()
 
-  -- Used for checking whether a table is empty.
-  -- Taken from: https://stackoverflow.com/a/1252776/19195633
+  -- `next()` function checks whether a table is empty.
+  -- Taken from: https://stackoverflow.com/a/1252776
   local next = next
-  -- If the active camera is orbit and vehData is NOT empty
-  if activeCam == 'orbit' and next(vehData) then
-
-    -- Get orbit camera data
-    local camData = core_camera.getCameraDataById(vehID)['orbit']
-
-    -- Recieve vehicle data. Note: vehData (should) be assigned from fetchData.lua if everything is set up properly.
-    local gx2 = vehData.sensors.gx2
-    local gy2 = vehData.sensors.gy2
-    local gz2 = vehData.sensors.gz2
-    local dirVec = vehData.dirVec
-    local dirVecUp = vehData.dirVecUp
-
-
-    --SETTING UP VARIABLES:
-    -- Additional Position
-    local addPos = vec3(0, 0, 0)
-    -- Additional Rotation
-    local addRot = vec3(0, 0, 0)
-    -- Additional Field of View
-    local addFOV = 0
-
-    --core_camera.setDefaultRotation(vehID, vec3(0, -13, 0))
-    --addPos = {
-    --  0,
-    --  dirVec   * gy2 * 100000,
-    --  dirVecUp * gz2 * 100000
-    --}
-
-    --addRot = {
-    --  -1 * gx2/5,
-    --  -1 * gy2/5,
-    --  -1 * gz2/5
-    --}
-
-    --core_camera.setRotation(vehID, addRot)
-    --core_camera.setOffset(vehID, addPos)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    -- Coefficients for limiting g-force camera position.
-    -- TODO: Get constraint values from user settings app
-    -- local PosYCoeff = 0.95
-    -- local PosZCoeff = 0.95
-
-
-    -- ADDITIONAL CAMERA POSITION CALCULATION:
-    -- Additional camera position based on g forces
-    addPos = {
-      0,
-      PosYCoeff * constrain(-1.3, (-1 * gy2) ,1.3),
-      PosZCoeff * constrain(-1.3, (-1 * (gz2 - 1)) ,1.3)
-    }
-
+  for vehicleID, vehicleData in pairs(data) do
+    if activeCamName == 'orbit' and next(vehicleData) then
+      -- Get orbit camera data
+      local cameraData = core_camera.getCameraDataById(vehicleID)['orbit']
+    
+      -- Recieve vehicle data. Note: overall data should be assigned from fetchData.lua if everything is set up properly.
+      
+      --g-forces experienced by the vehicle
+      local gforces = vec3()
+      gforces.x = vehicleData.gforces.x
+      gforces.y = vehicleData.gforces.y
+      gforces.z = vehicleData.gforces.z
+    
+      --normalized orientation vectors of the vehicle, for forward and upward directions respectively.
+      local vectors     = {}
+      vectors.forward   = vehicleData.vectors.forward ; vectors.forward:inverse()
+      vectors.up        = vehicleData.vectors.up
+      
+      local centrePosition = vehicleData.centrePosition
+    
+      local desiredOffsetCoordinates = vec3(0, -1, 0)
+    
+      local LocalOffsetCoordinates = vec3(
+        vectors.forward.x * desiredOffsetCoordinates.x,
+        vectors.forward.y * desiredOffsetCoordinates.y,
+             vectors.up.z * desiredOffsetCoordinates.z
+      )
+    
+      local desiredGlobalOffsetCoordinates = centrePosition + LocalOffsetCoordinates
+    
+      core_camera.setOffset(vehicleID, desiredGlobalOffsetCoordinates)
+    end
   end
-
 end
 
 -- Export module functions
-M.constrain = constrain
+M.constrain = clamp
 M.onUpdate = onUpdate
-M.GetVehData = GetVehData
+M.GetVehicleData = GetVehicleData
 
 return M

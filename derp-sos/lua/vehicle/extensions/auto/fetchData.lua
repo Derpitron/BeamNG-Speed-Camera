@@ -8,26 +8,39 @@
 local M = {}
 local lpack = require('lpack')
 
-print("TheVLuaTest400")
-
 --Get vehicle data. Runs every frame
 local function updateGFX(dt)
-
+  --Table containing data of all vehicles
   local data = {}
-  data.vel = vec3(obj:getVelocity())
+  --ID of individual vehicle
+  local vehicleID = obj:getID()
 
-  --Get vehicle sensors data
-  data.sensors = {}
-  data.sensors.gx2 = sensors.gx2
-  data.sensors.gy2 = sensors.gy2
-  data.sensors.gz2 = sensors.gz2
-  
-  --Get vehicle direction vectors
-  data.dirVec = obj:getDirectionVector()
-  data.dirVecUp = obj:getDirectionVectorUp()
+  --Sub-table containing the data for the specific vehicle of ID "vehicleID" 
+  data[vehicleID] = {}
+
+  --Vehicle velocity
+  data[vehicleID].velocity = vec3(obj:getVelocity())
+
+  --Vehicle sensors (g-force) data
+  data[vehicleID].gforces = {}
+  data[vehicleID].gforces.x = sensors.gx2/-9.81
+  data[vehicleID].gforces.y = sensors.gy2/-9.81
+  data[vehicleID].gforces.z = sensors.gz2/-9.81
+
+  --Vehicle direction vectors
+  data[vehicleID].vectors = {}
+  data[vehicleID].vectors.forward = vec3(obj:getDirectionVector  ()):normalized() * -1
+  data[vehicleID].vectors.up      = vec3(obj:getDirectionVectorUp()):normalized()
+
+  --Global coordinates of vehicle centre
+  data[vehicleID].centrePosition = vec3(obj:getPosition())
+
+  --Vehicle refnodes
+
+  dump(data)
 
   --Send data to GameEngine
-  obj:queueGameEngineLua(string.format("GetVehData(%q)", lpack.encode(data)))
+  obj:queueGameEngineLua(string.format("GetVehicleData(%q)", lpack.encode(data)))
 end
 
 M.updateGFX = updateGFX
