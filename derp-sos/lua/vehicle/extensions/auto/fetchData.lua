@@ -29,15 +29,13 @@ local function updateGFX(dt)
 
   --Vehicle direction vectors
   data[vehicleID].vectors = {}
-  data[vehicleID].vectors.forward = vec3(obj:getDirectionVector  ()):normalized() * -1
+  data[vehicleID].vectors.forward = vec3(obj:getDirectionVector  ()):normalized()
   data[vehicleID].vectors.up      = vec3(obj:getDirectionVectorUp()):normalized()
 
   --Global coordinates of vehicle centre
   data[vehicleID].centrePosition = vec3(obj:getPosition())
 
   --Vehicle refnodes
-
-  dump(data)
 
   --Send data to GameEngine
   obj:queueGameEngineLua(string.format("GetVehicleData(%q)", lpack.encode(data)))

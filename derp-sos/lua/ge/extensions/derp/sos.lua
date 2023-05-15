@@ -47,22 +47,22 @@ local function onUpdate(dtSim, dtRaw)
     
       --normalized orientation vectors of the vehicle, for forward and upward directions respectively.
       local vectors     = {}
-      vectors.forward   = vehicleData.vectors.forward ; vectors.forward:inverse()
+      vectors.forward   = vehicleData.vectors.forward
       vectors.up        = vehicleData.vectors.up
       
-      local centrePosition = vehicleData.centrePosition
+      local camPosition = cameraData.camLastPos
     
-      local desiredOffsetCoordinates = vec3(0, -1, 0)
+      --local desiredOffsetCoordinates = vec3(0, 1, 0)
     
-      local LocalOffsetCoordinates = vec3(
-        vectors.forward.x * desiredOffsetCoordinates.x,
-        vectors.forward.y * desiredOffsetCoordinates.y,
-             vectors.up.z * desiredOffsetCoordinates.z
-      )
+      local desiredGlobalOffsetCoordinates = camPosition + (vectors.forward * 1) + (vectors.up * 0)
+
+      --dump(cameraData)
+
+      local newRot = vec3(0, -10, 0)
+
+      dump(cameraData)
     
-      local desiredGlobalOffsetCoordinates = centrePosition + LocalOffsetCoordinates
-    
-      core_camera.setOffset(vehicleID, desiredGlobalOffsetCoordinates)
+      --core_camera.setOffset(vehicleID, desiredGlobalOffsetCoordinates)
     end
   end
 end
