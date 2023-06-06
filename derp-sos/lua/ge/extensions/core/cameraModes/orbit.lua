@@ -137,6 +137,18 @@ function C:setSkipFovModifier(skip)
   self.skipFovModifier = skip
 end
 
+function C:setPosition(px, py, pz)
+  self.camPos = vec3(px, py, pz)
+end
+
+function c:setRotation(rx, ry, rz)
+  self.camRot = vec3(rx, ry, rz)
+end
+
+function C:setDirection(dx, dy, dz)
+  self.dir = vec3(dx, dy, dz)
+end
+
 local ref, left, back, dirxy = vec3(), vec3(), vec3(), vec3()
 
 local nx, ny, nz, nxnz = vec3(), vec3(), vec3(), vec3()
@@ -392,7 +404,6 @@ function C:update(data)
   data.res.targetPos:set(targetPos)
   self.collision:update(data)
 
-  print("loadedorbitfunni")
   return true
 end
 
