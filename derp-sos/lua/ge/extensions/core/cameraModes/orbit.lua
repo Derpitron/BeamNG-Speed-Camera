@@ -74,11 +74,22 @@ function C:onVehicleSwitched()
   self.collision:onVehicleSwitched()
 end
 
+--DynamiCam
+local function clamp(num, min, max)
+  if num > max then return max end
+  if num < min then return min end
+  return num
+end
+--DynamiCam
+
 function C:reset()
   if self.cameraResetted == 0 then
     self.preResetPos = vec3(self.camLastTargetPos2)
     self.cameraResetted = 3
     self.collision:init()
+    --DynamiCam
+    self.amp = vec3(0.08, 0.08, 0.08)
+    self.freq = vec3(0.05, 0.05, 0.05)
   end
 end
 
@@ -386,13 +397,61 @@ function C:update(data)
   self.cameraResetted = math.max(self.cameraResetted - 1, 0)
 
   -- application
-  data.res.pos = camPos
+
+  --DynamiCam
+  -- application & modification
+  local carLeft = (left-ref); carLeft:normalize()
+  local carFwd = (back-ref); carFwd:normalize()
+  local carUp = carLeft:cross(back); carUp:normalize()
+  local carDir = quatFromDir(carFwd, carUp)
+
+  local accel = carDir:inversed()*data.vel - carDir:inversed()*data.prevVel
+  local velSmoother = newTemporalSmoothingNonLinear(12, 116)
+
+  accel.x = velSmoother:get(accel.x, data.dt)
+  accel.y = velSmoother:get(accel.y, data.dt)
+  accel.z = velSmoother:get(accel.z, data.dt)
+  if self.speedsmooth == nil then self.speedsmooth = {x=0,y=0,z=0} end
+  if self.speedsmoothnt == nil then self.speedsmoothnt = {x=0,y=0,z=0} end
+  if self.accelsmooth == nil then self.accelsmooth = {x=0,y=0,z=0} end
+  if self.time == nil then self.time = {x=0,y=0,z=0} end
+
+  self.time.x = self.time.x + clamp(math.random()*self.accelsmooth.x*15,0,2)
+  self.time.y = self.time.y + clamp(math.random()*self.accelsmooth.y*15,0,2)
+  self.time.z = self.time.z + clamp(math.random()*self.accelsmooth.z*15,0,2)
+
+  self.accelsmooth.x = (self.accelsmooth.x*15 + accel.x*2) / 16
+  self.accelsmooth.y = (self.accelsmooth.y*15 + accel.y*2) / 16
+  self.accelsmooth.z = (self.accelsmooth.z*15 + accel.z*2) / 16
+
+  local offset = vec3(
+    3.01 * math.sin(math.pi * 0.01 + (self.time.x) * 0.2) * math.abs(self.accelsmooth.x) * 0.04,
+    3.01 * math.sin(math.pi * 0.01 + (self.time.y) * 0.2) * math.abs(self.accelsmooth.y) * 0.04,
+    3.01 * math.sin(math.pi * 0.01 + (self.time.z) * 0.2) * math.abs(self.accelsmooth.z) * 0.04
+  )
+
+  local veloffset = vec3(
+    (data.vel.x*0.1 / (((math.abs(data.vel.x*0.1)+1)^2)*0.1) )*0.3,
+    (data.vel.y*0.1 / (((math.abs(data.vel.y*0.1)+1)^2)*0.1) )*0.3,
+    (data.vel.z*0.1 / (((math.abs(data.vel.z*0.1)+1)^2)*0.1) )*0.3
+  )
+
+  self.speedsmooth.x = ((self.speedsmooth.x * 50) + veloffset.x) / 51
+  self.speedsmooth.y = ((self.speedsmooth.y * 50) + veloffset.y) / 51
+  self.speedsmooth.z = ((self.speedsmooth.z * 50) + veloffset.z) / 51
+
+  self.speedsmoothnt.x = ((self.speedsmoothnt.x * 10) + veloffset.x) / 11
+  self.speedsmoothnt.y = ((self.speedsmoothnt.y * 10) + veloffset.y) / 11
+  self.speedsmoothnt.z = ((self.speedsmoothnt.z * 10) + veloffset.z) / 11
+
+  data.res.pos = vec3(camPos)+{x=0,y=0,z=.5}+((offset)+(vec3(self.speedsmoothnt.x-self.speedsmooth.x,self.speedsmoothnt.y-self.speedsmooth.y,self.speedsmoothnt.z-self.speedsmooth.z)))
+  --DynamiCam
+
   data.res.rot = quatFromDir(push3(targetPos) - camPos)
   data.res.fov = fov
   data.res.targetPos:set(targetPos)
   self.collision:update(data)
 
-  print("loadedorbitfunni")
   return true
 end
 
@@ -404,4 +463,3 @@ return function(...)
   o:init()
   return o
 end
-
