@@ -345,7 +345,7 @@ function C:update(data)
   local refToRear = rear:distance(targetPos)
   local hdegToRad = math.pi/180 * 0.5
 
-  local fov = self.fov
+  local fov = 70 --self.fov
   local fovdistDiff = 0
   local fovModifier = self.skipFovModifier and 0 or self.fovModifier
 
@@ -391,6 +391,7 @@ function C:update(data)
   data.res.fov = fov
   data.res.targetPos:set(targetPos)
   self.collision:update(data)
+  print("loadedreal")
   return true
 end
 
