@@ -362,7 +362,7 @@ function C:update(data)
 
   if (not self.target) and self.fov and fovModifier and self.maxDynamicFov and self.camDist then
     -- compute how much more FOV we're going to add depending on speed (from zero up to self.maxDynamicFov)
-    fov = self.fov + fovModifier + self.maxDynamicFov * (math.min(1, vehicleData.velocity:length()/130))
+    fov = self.fov + fovModifier + self.maxDynamicFov * (math.min(1, data.vel:length()/130))
 
     -- apply final field of view
     -- compute and apply the camera distance that will preserve the originalWidth
@@ -477,7 +477,7 @@ function C:update(data)
   end
   --#endregion declare vehicleData
 
-  --TODO: Refactor these 3 variable assignments away from using global variables (self.finalAcceleration etc.etc.etc) 
+  --TODO: Refactor these 3 variable assignments away from using global variables (*self* etc.etc.etc) 
   if self.randomCameraShakeOffset == nil then self.randomCameraShakeOffset = vec3(0,0,0) end
   for i, _ in pairs(self.randomCameraShakeOffset) do
     self.randomCameraShakeOffset[i] = self.randomCameraShakeOffset[i] + ( constants.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.cameraShake.frequency[i]) )
