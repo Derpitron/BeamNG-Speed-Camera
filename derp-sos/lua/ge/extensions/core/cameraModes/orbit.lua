@@ -482,23 +482,27 @@ function C:update(data)
   end
   --#endregion declare vehicleData
 
-  --TODO: Refactor these 3 variable assignments away from using global variables (self.finalAcceleration etc.etc.etc) 
-  if self.randomCameraShakeOffset == nil then self.randomCameraShakeOffset = vec3(0,0,0) end
-  for i, _ in pairs(self.randomCameraShakeOffset:toDict()) do
-    self.randomCameraShakeOffset[i] = self.randomCameraShakeOffset[i] + ( constants.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.cameraShake.frequency[i]) )
+  --Bootstrap the boilerplate camera data values
+  if type(customDynamiCamData) ~= "nil" then customDynamiCamData.randomCameraShakeOffset, customDynamiCamData.offsetCausedByAcceleration, customDynamiCamData.offsetCausedByVelocity = vec3(0,0,0), vec3(0,0,0), vec3(0,0,0) end
+  local customDynamiCamData = {
+    randomCameraShakeOffset = vec3(0,0,0),
+    offsetCausedByAcceleration = vec3(0,0,0),
+    offsetCausedByVelocity = vec3(0,0,0)
+  }
+
+  for i, _ in pairs(customDynamiCamData.randomCameraShakeOffset:toDict()) do
+    customDynamiCamData.randomCameraShakeOffset[i] = customDynamiCamData.randomCameraShakeOffset[i] + ( constants.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.cameraShake.frequency[i]) )
   end
 
-  if self.offsetCausedByAcceleration == nil then self.offsetCausedByAcceleration = vec3(0,0,0) end
-  for i, _ in pairs(self.offsetCausedByAcceleration:toDict()) do
-    self.offsetCausedByAcceleration[i] = self.offsetCausedByAcceleration[i] + (math.abs(self.vehicleData.acceleration.rawToSmoothed[i]) * constants.acceleration.offsetCoefficient ) + (constants.acceleration.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.acceleration.cameraShake.frequency[i]))
+  for i, _ in pairs(customDynamiCamData.offsetCausedByAcceleration:toDict()) do
+    customDynamiCamData.offsetCausedByAcceleration[i] = customDynamiCamData.offsetCausedByAcceleration[i] + (math.abs(self.vehicleData.acceleration.rawToSmoothed[i]) * constants.acceleration.offsetCoefficient ) + (constants.acceleration.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.acceleration.cameraShake.frequency[i]))
   end
 
-  if self.offsetCausedByVelocity == nil then self.offsetCausedByVelocity = vec3(0,0,0) end
-  for i, _ in pairs(self.offsetCausedByVelocity:toDict()) do
-    self.offsetCausedByVelocity[i] = self.offsetCausedByVelocity + ( vehicleData.velocity[i] * constants.velocity.offsetCoefficient ) + (constants.velocity.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.velocity.cameraShake.frequency[i]))
+  for i, _ in pairs(customDynamiCamData.offsetCausedByVelocity:toDict()) do
+    customDynamiCamData.offsetCausedByVelocity[i] = customDynamiCamData.offsetCausedByVelocity + ( vehicleData.velocity[i] * constants.velocity.offsetCoefficient ) + (constants.velocity.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.velocity.cameraShake.frequency[i]))
   end
 
-  data.res.pos = camPos + (self.randomCameraShakeOffset + self.offsetCausedByAcceleration + self.offsetCausedByVelocity) * vehicleData.vectors.forward
+  data.res.pos = camPos + (customDynamiCamData.randomCameraShakeOffset + customDynamiCamData.offsetCausedByAcceleration + customDynamiCamData.offsetCausedByVelocity) * vehicleData.vectors.forward
 --#endregion DynamiCam
 
 --#region vanillaOrbitCode
