@@ -401,6 +401,7 @@ function C:update(data)
 
 --#region DynamiCam
   -- check if the variable vehicleData.prevVelocity exists
+
   local constants = {
     acceleration = {
       smoother = {
@@ -453,15 +454,19 @@ function C:update(data)
     ---@type LuaVec3
     previousVelocity = vec3(0,0,0),
 
+    acceleration = {
+      ---@type LuaVec3
+      rawToSmoothed = vec3(0,0,0)
+    },
     vectors = {
       ---@type LuaVec3
-      forward = data.veh:getDirectionVectorXYZ(),
+      forward = data.veh:getDirectionVector(),
 
       ---@type LuaVec3
-      up      = data.veh:getDirectionVectorUpXYZ(),
+      up      = data.veh:getDirectionVectorUp(),
 
       ---@type LuaVec3
-      right   = data.veh:getDirectionVectorRightXYZ(),
+      --right   = data.veh:getDirectionVectorRightXYZ(),
 
       ---@type LuaQuat
       directionQuaternion = nil
@@ -472,28 +477,28 @@ function C:update(data)
   local accelerationSmoother = newTemporalSmoothingNonLinear(constants.acceleration.smoother.inRate, constants.acceleration.smoother.outRate)
 
   vehicleData.acceleration.rawToSmoothed = vehicleData.vectors.directionQuaternion:inversed()*vehicleData.velocity - vehicleData.vectors.directionQuaternion:inversed()*vehicleData.previousVelocity
-  for i, _ in pairs(vehicleData.acceleration.rawToSmoothed) do
+  for i, _ in pairs(vehicleData.acceleration.rawToSmoothed:toDict()) do
     vehicleData.acceleration.rawToSmoothed[i] = accelerationSmoother:get(vehicleData.acceleration.rawToSmoothed[i], constants.acceleration.smoother.deltaTime)
   end
   --#endregion declare vehicleData
 
-  --TODO: Refactor these 3 variable assignments away from using global variables (*self* etc.etc.etc) 
+  --TODO: Refactor these 3 variable assignments away from using global variables (self.finalAcceleration etc.etc.etc) 
   if self.randomCameraShakeOffset == nil then self.randomCameraShakeOffset = vec3(0,0,0) end
-  for i, _ in pairs(self.randomCameraShakeOffset) do
+  for i, _ in pairs(self.randomCameraShakeOffset:todict()) do
     self.randomCameraShakeOffset[i] = self.randomCameraShakeOffset[i] + ( constants.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.cameraShake.frequency[i]) )
   end
 
   if self.offsetCausedByAcceleration == nil then self.offsetCausedByAcceleration = vec3(0,0,0) end
-  for i, _ in pairs(self.offsetCausedByAcceleration) do
+  for i, _ in pairs(self.offsetCausedByAcceleration:todict()) do
     self.offsetCausedByAcceleration[i] = self.offsetCausedByAcceleration[i] + (math.abs(self.vehicleData.acceleration.rawToSmoothed[i]) * constants.acceleration.offsetCoefficient ) + (constants.acceleration.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.acceleration.cameraShake.frequency[i]))
   end
 
   if self.offsetCausedByVelocity == nil then self.offsetCausedByVelocity = vec3(0,0,0) end
-  for i, _ in pairs(self.offsetCausedByVelocity) do
-    self.offsetCausedByVelocity[i] = self.offsetCausedByVelocity[i] + ( vehicleData.velocity[i] * constants.velocity.offsetCoefficient ) + (constants.velocity.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.velocity.cameraShake.frequency[i]))
+  for i, _ in pairs(self.offsetCausedByVelocity:todict()) do
+    self.offsetCausedByVelocity[i] = self.offsetCausedByVelocity + ( vehicleData.velocity[i] * constants.velocity.offsetCoefficient ) + (constants.velocity.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.velocity.cameraShake.frequency[i]))
   end
 
-  data.res.pos = camPos + ( (self.randomCameraShakeOffset + self.offsetCausedByAcceleration + self.offsetCausedByVelocity) * vehicleData.vectors.forward )
+  data.res.pos = camPos + (self.randomCameraShakeOffset + self.offsetCausedByAcceleration + self.offsetCausedByVelocity) * vehicleData.vectors.forward
 --#endregion DynamiCam
 
 --#region vanillaOrbitCode
@@ -502,7 +507,7 @@ function C:update(data)
   data.res.targetPos:set(targetPos)
   self.collision:update(data)
 
-  dump(self)
+  dump(data.veh)
 
   return true
 end
