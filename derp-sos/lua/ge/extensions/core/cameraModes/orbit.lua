@@ -490,10 +490,10 @@ function C:update(data)
 
   if self.offsetCausedByVelocity == nil then self.offsetCausedByVelocity = vec3(0,0,0) end
   for i, _ in pairs(self.offsetCausedByVelocity) do
-    self.offsetCausedByVelocity[i] = self.offsetCausedByVelocity + ( vehicleData.velocity[i] * constants.velocity.offsetCoefficient ) + (constants.velocity.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.velocity.cameraShake.frequency[i]))
+    self.offsetCausedByVelocity[i] = self.offsetCausedByVelocity[i] + ( vehicleData.velocity[i] * constants.velocity.offsetCoefficient ) + (constants.velocity.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.velocity.cameraShake.frequency[i]))
   end
 
-  data.res.pos = camPos + (self.randomCameraShakeOffset + self.offsetCausedByAcceleration + self.offsetCausedByVelocity) * vehicleData.vectors.forward
+  data.res.pos = camPos + ( (self.randomCameraShakeOffset + self.offsetCausedByAcceleration + self.offsetCausedByVelocity) * vehicleData.vectors.forward )
 --#endregion DynamiCam
 
 --#region vanillaOrbitCode
