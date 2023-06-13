@@ -1,3 +1,4 @@
+---@diagnostic disable: undefined-doc-name
 --#region vanillaOrbitCode
 -- This Source Code Form is subject to the terms of the bCDDL, v. 1.1.
 -- If a copy of the bCDDL was not distributed with this
@@ -76,10 +77,23 @@ function C:onVehicleSwitched()
 end
 
 --DynamiCam
+
+---Clamps the `num` variable between the `min` and `max` values
+---@param num number
+---@param min number
+---@param max number
+---@return number
 local function clamp(num, min, max)
   if num > max then return max end
   if num < min then return min end
   return num
+end
+
+---Takes a LuaVec3 vector as input, and returns a LuaVec3 of the sines of the components of the same vector.
+---@param x LuaVec3 
+---@return LuaVec3
+local function sinVec3(x)
+  return vec3(math.sin(x.x), math.sin(x.y), math.sin(x.z))
 end
 --DynamiCam
 
@@ -415,32 +429,25 @@ function C:update(data)
         deltaTime = 0.0334
       },
       cameraShake = {
-        ---@type number
-        amplitude = 15,
+        ---@type LuaVec3
+        amplitude = vec3(15, 15, 15),
 
-        ---@type number
-        frequency = 0.03
+        ---@type LuaVec3
+        frequency = vec3(0.03, 0.03, 0.03)
       },
       ---@type number
       offsetCoefficient = 1
     },
     velocity = {
       cameraShake = {
-        ---@type number
-        amplitude = 1,
+        ---@type LuaVec3
+        amplitude = vec3(1, 1, 1),
 
-        ---@type number
-        frequency = 0.03
+        ---@type LuaVec3
+        frequency = vec3(0.03, 0.03, 0.03)
       },
       ---@type number
       offsetCoefficient = 1
-    },
-    cameraShake = {
-      ---@type LuaVec3
-      frequency = vec3(1, 1, 1),
-
-      ---@type LuaVec3
-      amplitude = vec3(1, 1, 1)
     }
   }
 
@@ -471,6 +478,7 @@ function C:update(data)
       directionQuaternion = nil
     }
   }
+    ---@type LuaQuat
   vehicleData.vectors.directionQuaternion = quatFromDir(vehicleData.vectors.forward, vehicleData.vectors.up)
 
   local accelerationSmoother = newTemporalSmoothingNonLinear(constants.acceleration.smoother.inRate, constants.acceleration.smoother.outRate)
@@ -482,24 +490,47 @@ function C:update(data)
   --#endregion declare vehicleData
 
   --Bootstrap the boilerplate camera data values
-  if type(customDynamiCamData) ~= "nil" then customDynamiCamData.randomCameraShakeOffset, customDynamiCamData.offsetCausedByAcceleration, customDynamiCamData.offsetCausedByVelocity = vec3(0,0,0), vec3(0,0,0), vec3(0,0,0) end
+  if type(customDynamiCamData) ~= "nil" then
+    customDynamiCamData.offsetCausedByAcceleration,
+    customDynamiCamData.offsetCausedByVelocity
+    = vec3(0,0,0), vec3(0,0,0)
+  end
+
   local customDynamiCamData = {
-    randomCameraShakeOffset    = vec3(0,0,0),
+    ---@type LuaVec3
     offsetCausedByAcceleration = vec3(0,0,0),
+
+    ---@type LuaVec3
     offsetCausedByVelocity     = vec3(0,0,0)
   }
 
-  customDynamiCamData.randomCameraShakeOffset.x = customDynamiCamData.randomCameraShakeOffset.x + ( constants.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.cameraShake.frequency.x) )
-  customDynamiCamData.randomCameraShakeOffset.y = customDynamiCamData.randomCameraShakeOffset.y + ( constants.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.cameraShake.frequency.y) )
-  customDynamiCamData.randomCameraShakeOffset.z = customDynamiCamData.randomCameraShakeOffset.z + ( constants.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.cameraShake.frequency.z) )
+  local rand2pi = 2*math.pi * math.random()
+  customDynamiCamData.offsetCausedByAcceleration:setAdd(
+    (
+      vehicleData.acceleration.rawToSmoothed
+      * vec3(constants.acceleration.offsetCoefficient, constants.acceleration.offsetCoefficient, constants.acceleration.offsetCoefficient)
+    )
+    + (
+      constants.acceleration.cameraShake.amplitude
+      * sinVec3(
+          constants.acceleration.cameraShake.frequency * vec3(rand2pi, rand2pi, rand2pi)
+      )
+    )
+  )
 
-  customDynamiCamData.offsetCausedByAcceleration.x = customDynamiCamData.offsetCausedByAcceleration.x + (math.abs(self.vehicleData.acceleration.rawToSmoothed.x) * constants.acceleration.offsetCoefficient ) + (constants.acceleration.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.acceleration.cameraShake.frequency.x))
-  customDynamiCamData.offsetCausedByAcceleration.y = customDynamiCamData.offsetCausedByAcceleration.y + (math.abs(self.vehicleData.acceleration.rawToSmoothed.y) * constants.acceleration.offsetCoefficient ) + (constants.acceleration.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.acceleration.cameraShake.frequency.y))
-  customDynamiCamData.offsetCausedByAcceleration.z = customDynamiCamData.offsetCausedByAcceleration.z + (math.abs(self.vehicleData.acceleration.rawToSmoothed.z) * constants.acceleration.offsetCoefficient ) + (constants.acceleration.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.acceleration.cameraShake.frequency.z))
-
-  customDynamiCamData.offsetCausedByVelocity.x = customDynamiCamData.offsetCausedByVelocity + ( vehicleData.velocity.x * constants.velocity.offsetCoefficient ) + (constants.velocity.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.velocity.cameraShake.frequency.x))
-  customDynamiCamData.offsetCausedByVelocity.y = customDynamiCamData.offsetCausedByVelocity + ( vehicleData.velocity.y * constants.velocity.offsetCoefficient ) + (constants.velocity.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.velocity.cameraShake.frequency.y))
-  customDynamiCamData.offsetCausedByVelocity.z = customDynamiCamData.offsetCausedByVelocity + ( vehicleData.velocity.z * constants.velocity.offsetCoefficient ) + (constants.velocity.cameraShake.amplitude * math.sin(2*math.pi * math.random() * constants.velocity.cameraShake.frequency.z))
+  rand2pi = 2*math.pi * math.random()
+  customDynamiCamData.offsetCausedByVelocity:setAdd(
+    (
+      vehicleData.velocity
+      * vec3(constants.velocity.offsetCoefficient, constants.velocity.offsetCoefficient, constants.velocity.offsetCoefficient)
+    )
+    + (
+      constants.velocity.cameraShake.amplitude
+      * sinVec3(
+          constants.velocity.cameraShake.frequency * vec3(rand2pi, rand2pi, rand2pi)
+      )
+    )
+  )
 
   --TODO: Use core_camera.setOffset() and core_camera.setRotation() for applying the custom camera position
   data.res.pos = camPos + (customDynamiCamData.randomCameraShakeOffset + customDynamiCamData.offsetCausedByAcceleration + customDynamiCamData.offsetCausedByVelocity) * vehicleData.vectors.forward
