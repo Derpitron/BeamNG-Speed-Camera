@@ -1,3 +1,5 @@
+---@diagnostic disable: undefined-doc-name
+--#region vanillaOrbitCode
 -- This Source Code Form is subject to the terms of the bCDDL, v. 1.1.
 -- If a copy of the bCDDL was not distributed with this
 -- file, You can obtain one at http://beamng.com/bCDDL-1.1.txt
@@ -75,10 +77,23 @@ function C:onVehicleSwitched()
 end
 
 --DynamiCam
+
+---Clamps the `num` variable between the `min` and `max` values
+---@param num number
+---@param min number
+---@param max number
+---@return number
 local function clamp(num, min, max)
   if num > max then return max end
   if num < min then return min end
   return num
+end
+
+---Takes a LuaVec3 vector as input, and returns a LuaVec3 of the sines of the components of the same vector.
+---@param x LuaVec3 
+---@return LuaVec3
+local function sinVec3(x)
+  return vec3(math.sin(x.x), math.sin(x.y), math.sin(x.z))
 end
 --DynamiCam
 
@@ -88,8 +103,6 @@ function C:reset()
     self.cameraResetted = 3
     self.collision:init()
     --DynamiCam
-    self.amp = vec3(0.08, 0.08, 0.08)
-    self.freq = vec3(0.05, 0.05, 0.05)
   end
 end
 
@@ -295,8 +308,9 @@ function C:update(data)
   else
     newCamDist = self.camDist + zoomChange * dtfactor * adjustedSpeed * 0.0001 * core_camera.getFovDeg()
   end
+  --DynamiCam
   self.camDist = clamp(newCamDist, self.camMinDist, self.camMaxDist or math.huge)
-
+  --DynamiCam
   if nx:squaredLength() == 0 or ny:squaredLength() == 0 then
     data.res.pos = data.pos
     data.res.rot = quatFromDir(vecY, vecZ)
@@ -397,60 +411,138 @@ function C:update(data)
   self.cameraResetted = math.max(self.cameraResetted - 1, 0)
 
   -- application
+  --#endregion vanillaOrbitCode
 
-  --DynamiCam
-  -- application & modification
-  local carLeft = (left-ref); carLeft:normalize()
-  local carFwd = (back-ref); carFwd:normalize()
-  local carUp = carLeft:cross(back); carUp:normalize()
-  local carDir = quatFromDir(carFwd, carUp)
+--#region DynamiCam
+  -- check if the variable vehicleData.prevVelocity exists
 
-  local accel = carDir:inversed()*data.vel - carDir:inversed()*data.prevVel
-  local velSmoother = newTemporalSmoothingNonLinear(12, 116)
+  local constants = {
+    acceleration = {
+      smoother = {
+        ---@type number
+        inRate  = 12,
 
-  accel.x = velSmoother:get(accel.x, data.dt)
-  accel.y = velSmoother:get(accel.y, data.dt)
-  accel.z = velSmoother:get(accel.z, data.dt)
-  if self.speedsmooth == nil then self.speedsmooth = {x=0,y=0,z=0} end
-  if self.speedsmoothnt == nil then self.speedsmoothnt = {x=0,y=0,z=0} end
-  if self.accelsmooth == nil then self.accelsmooth = {x=0,y=0,z=0} end
-  if self.time == nil then self.time = {x=0,y=0,z=0} end
+        ---@type number
+        outRate = 116,
 
-  self.time.x = self.time.x + clamp(math.random()*self.accelsmooth.x*15,0,2)
-  self.time.y = self.time.y + clamp(math.random()*self.accelsmooth.y*15,0,2)
-  self.time.z = self.time.z + clamp(math.random()*self.accelsmooth.z*15,0,2)
+        ---@type number
+        deltaTime = 0.0334
+      },
+      cameraShake = {
+        ---@type LuaVec3
+        amplitude = vec3(15, 15, 15),
 
-  self.accelsmooth.x = (self.accelsmooth.x*15 + accel.x*2) / 16
-  self.accelsmooth.y = (self.accelsmooth.y*15 + accel.y*2) / 16
-  self.accelsmooth.z = (self.accelsmooth.z*15 + accel.z*2) / 16
+        ---@type LuaVec3
+        frequency = vec3(0.03, 0.03, 0.03)
+      },
+      ---@type number
+      offsetCoefficient = 1
+    },
+    velocity = {
+      cameraShake = {
+        ---@type LuaVec3
+        amplitude = vec3(1, 1, 1),
 
-  local offset = vec3(
-    3.01 * math.sin(math.pi * 0.01 + (self.time.x) * 0.2) * math.abs(self.accelsmooth.x) * 0.04,
-    3.01 * math.sin(math.pi * 0.01 + (self.time.y) * 0.2) * math.abs(self.accelsmooth.y) * 0.04,
-    3.01 * math.sin(math.pi * 0.01 + (self.time.z) * 0.2) * math.abs(self.accelsmooth.z) * 0.04
+        ---@type LuaVec3
+        frequency = vec3(0.03, 0.03, 0.03)
+      },
+      ---@type number
+      offsetCoefficient = 1
+    }
+  }
+
+  --#region declare vehicleData
+  if type(vehicleData) ~= "nil" then vehicleData.previousVelocity = data.veh:getVelocity() end
+  local vehicleData = {
+    ---@type LuaVec3
+    velocity = data.veh:getVelocity(),
+
+    ---@type LuaVec3
+    previousVelocity = vec3(0,0,0),
+
+    acceleration = {
+      ---@type LuaVec3
+      rawToSmoothed = vec3(0,0,0)
+    },
+    vectors = {
+      ---@type LuaVec3
+      forward = data.veh:getDirectionVector(),
+
+      ---@type LuaVec3
+      up      = data.veh:getDirectionVectorUp(),
+
+      ---@type LuaVec3
+      --right   = data.veh:getDirectionVectorRightXYZ(),
+
+      ---@type LuaQuat
+      directionQuaternion = nil
+    }
+  }
+    ---@type LuaQuat
+  vehicleData.vectors.directionQuaternion = quatFromDir(vehicleData.vectors.forward, vehicleData.vectors.up)
+
+  local accelerationSmoother = newTemporalSmoothingNonLinear(constants.acceleration.smoother.inRate, constants.acceleration.smoother.outRate)
+
+  vehicleData.acceleration.rawToSmoothed = vehicleData.vectors.directionQuaternion:inversed()*vehicleData.velocity - vehicleData.vectors.directionQuaternion:inversed()*vehicleData.previousVelocity
+  for i, _ in pairs(vehicleData.acceleration.rawToSmoothed:toDict()) do
+    vehicleData.acceleration.rawToSmoothed[i] = accelerationSmoother:get(vehicleData.acceleration.rawToSmoothed[i], constants.acceleration.smoother.deltaTime)
+  end
+  --#endregion declare vehicleData
+
+  --Bootstrap the boilerplate camera data values
+  if type(customDynamiCamData) ~= "nil" then
+    customDynamiCamData.offsetCausedByAcceleration,
+    customDynamiCamData.offsetCausedByVelocity
+    = vec3(0,0,0), vec3(0,0,0)
+  end
+
+  local customDynamiCamData = {
+    ---@type LuaVec3
+    offsetCausedByAcceleration = vec3(0,0,0),
+
+    ---@type LuaVec3
+    offsetCausedByVelocity     = vec3(0,0,0)
+  }
+
+  local rand2pi = 2*math.pi * math.random()
+  customDynamiCamData.offsetCausedByAcceleration:setAdd(
+    (
+      vehicleData.acceleration.rawToSmoothed
+      * vec3(constants.acceleration.offsetCoefficient, constants.acceleration.offsetCoefficient, constants.acceleration.offsetCoefficient)
+    )
+    + (
+      constants.acceleration.cameraShake.amplitude
+      * sinVec3(
+          constants.acceleration.cameraShake.frequency * vec3(rand2pi, rand2pi, rand2pi)
+      )
+    )
   )
 
-  local veloffset = vec3(
-    (data.vel.x*0.1 / (((math.abs(data.vel.x*0.1)+1)^2)*0.1) )*0.3,
-    (data.vel.y*0.1 / (((math.abs(data.vel.y*0.1)+1)^2)*0.1) )*0.3,
-    (data.vel.z*0.1 / (((math.abs(data.vel.z*0.1)+1)^2)*0.1) )*0.3
+  rand2pi = 2*math.pi * math.random()
+  customDynamiCamData.offsetCausedByVelocity:setAdd(
+    (
+      vehicleData.velocity
+      * vec3(constants.velocity.offsetCoefficient, constants.velocity.offsetCoefficient, constants.velocity.offsetCoefficient)
+    )
+    + (
+      constants.velocity.cameraShake.amplitude
+      * sinVec3(
+          constants.velocity.cameraShake.frequency * vec3(rand2pi, rand2pi, rand2pi)
+      )
+    )
   )
 
-  self.speedsmooth.x = ((self.speedsmooth.x * 50) + veloffset.x) / 51
-  self.speedsmooth.y = ((self.speedsmooth.y * 50) + veloffset.y) / 51
-  self.speedsmooth.z = ((self.speedsmooth.z * 50) + veloffset.z) / 51
+  --TODO: Use core_camera.setOffset() and core_camera.setRotation() for applying the custom camera position
+  data.res.pos = camPos + (customDynamiCamData.randomCameraShakeOffset + customDynamiCamData.offsetCausedByAcceleration + customDynamiCamData.offsetCausedByVelocity) * vehicleData.vectors.forward
+--#endregion DynamiCam
 
-  self.speedsmoothnt.x = ((self.speedsmoothnt.x * 10) + veloffset.x) / 11
-  self.speedsmoothnt.y = ((self.speedsmoothnt.y * 10) + veloffset.y) / 11
-  self.speedsmoothnt.z = ((self.speedsmoothnt.z * 10) + veloffset.z) / 11
-
-  data.res.pos = vec3(camPos)+{x=0,y=0,z=.5}+((offset)+(vec3(self.speedsmoothnt.x-self.speedsmooth.x,self.speedsmoothnt.y-self.speedsmooth.y,self.speedsmoothnt.z-self.speedsmooth.z)))
-  --DynamiCam
-
+--#region vanillaOrbitCode
   data.res.rot = quatFromDir(push3(targetPos) - camPos)
   data.res.fov = fov
   data.res.targetPos:set(targetPos)
   self.collision:update(data)
+
+  dump(data.veh)
 
   return true
 end
@@ -463,3 +555,4 @@ return function(...)
   o:init()
   return o
 end
+--#endregion vanillaOrbitCode
