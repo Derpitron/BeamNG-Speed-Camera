@@ -4,6 +4,7 @@
 
 -- ORBIT CAMERA
 local collision = require('core/cameraModes/collision')
+local debugDraw = require('utils.debugDraw')
 
 local C = {}
 C.__index = C
@@ -17,6 +18,18 @@ local function getRot(base, vf, vz)
   local nzn = nxn:cross(nyn):normalized()
   local nbase = base:normalized()
   return math.atan2(-nbase:dot(nxn), nbase:dot(nyn)), math.asin(nbase:dot(nzn))
+end
+
+-- Draw a labelled sphere and text at a specified point.
+local function drawSphere(point_vec3, radius_m, colorF_RGBA, label_text)
+	debugDrawer:drawSphere(point_vec3, radius_m, colorF_RGBA)
+	debugDrawer:drawText(point_vec3, label_text, colorF_RGBA)
+end
+
+-- Draw a labelled line from point1 to point2.
+local function drawLine(point1_vec3, point2_vec3, colorF_RGBA, label_text)
+	debugDrawer:drawLine(point1_vec3, point2_vec3, colorF_RGBA)
+	debugDrawer:drawText(point1_vec3, label_text, colorF_RGBA)
 end
 
 function C:init()
@@ -411,6 +424,8 @@ function C:update(data)
   data.res.fov = fov
   data.res.targetPos:set(targetPos)
   self.collision:update(data)
+  
+  debugDrawer:setLastZTest(false)
   return true
 end
 
