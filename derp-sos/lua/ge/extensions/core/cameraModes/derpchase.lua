@@ -236,7 +236,6 @@ function C:update(data)
   data.res.targetPos = targetPos
 
   self.collision:update(data)
-
   return true
 end
 
