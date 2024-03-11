@@ -1,5 +1,3 @@
----@diagnostic disable: undefined-doc-name
---#region vanillaOrbitCode
 -- This Source Code Form is subject to the terms of the bCDDL, v. 1.1.
 -- If a copy of the bCDDL was not distributed with this
 -- file, You can obtain one at http://beamng.com/bCDDL-1.1.txt
@@ -33,6 +31,7 @@ function C:init()
   self.lockCamera = false
   self.orbitOffset = vec3()
   self.preResetPos = vec3(1e+300, 0, 0)
+  self.smoothedVelocity = newTemporalSmoothing(24, 24, 24)
 
   self.targetCenter = vec3(0, 0, 0)
   self.targetLeft = vec3(0, 0, 0)
@@ -57,11 +56,13 @@ function C:onVehicleCameraConfigChanged()
   if not self.camRot then self.camRot = vec3(self.defaultRotation) end
   self.camLastRot = vec3(math.rad(self.camRot.x), math.rad(self.camRot.y), 0)
   self.camMinDist = self.distanceMin or 3
+  self.camMaxDist = (self.distanceMin or 5) * 10
   self.camDist = self.distance or 5
   self.camLastDist = self.distance or 5
   self.defaultDistance = self.distance or 5
   self.mode = self.mode or 'ref'
   self.skipFovModifier = self.skipFovModifier or false
+  self.smoothedVelocity:set(0)
 end
 
 function C:onSettingsChanged()
@@ -69,6 +70,8 @@ function C:onSettingsChanged()
   self.fovModifier = settings.getValue('cameraOrbitFovModifier')
   self.relaxation = settings.getValue('cameraOrbitRelaxation') or 3
   self.maxDynamicFov = settings.getValue('cameraOrbitMaxDynamicFov') or 35
+  self.maxDynamicPitch = math.rad(settings.getValue('cameraOrbitMaxDynamicPitch') or 0)
+  self.maxDynamicOffset = settings.getValue('cameraOrbitMaxDynamicOffset') or 0
   self.smoothingEnabled = settings.getValue('cameraOrbitSmoothing', true)
 end
 
@@ -76,33 +79,11 @@ function C:onVehicleSwitched()
   self.collision:onVehicleSwitched()
 end
 
---DynamiCam
-
----Clamps the `num` variable between the `min` and `max` values
----@param num number
----@param min number
----@param max number
----@return number
-local function clamp(num, min, max)
-  if num > max then return max end
-  if num < min then return min end
-  return num
-end
-
----Takes a LuaVec3 vector as input, and returns a LuaVec3 of the sines of the components of the same vector.
----@param x LuaVec3 
----@return LuaVec3
-local function sinVec3(x)
-  return vec3(math.sin(x.x), math.sin(x.y), math.sin(x.z))
-end
---DynamiCam
-
 function C:reset()
   if self.cameraResetted == 0 then
     self.preResetPos = vec3(self.camLastTargetPos2)
     self.cameraResetted = 3
     self.collision:init()
-    --DynamiCam
   end
 end
 
@@ -163,7 +144,7 @@ end
 
 local ref, left, back, dirxy = vec3(), vec3(), vec3(), vec3()
 
-local nx, ny, nz, nxnz = vec3(), vec3(), vec3(), vec3()
+local nx, ny, nz = vec3(), vec3(), vec3()
 
 local targetPos, camdir, dir = vec3(), vec3(), vec3()
 
@@ -198,18 +179,23 @@ function C:update(data)
     end
     self.configChanged = false
   end
+  if data.teleported then
+      self.smoothedVelocity:set(data.vel:length())
+  end
 
   -- calculate the camera offset: rotate with the vehicle
   nx:set(push3(left) - ref)
   ny:set(push3(back) - ref)
-  nz:set(push3(nx):cross(ny)); nz:normalize()
-  nxnz:set(push3(nx):cross(-push3(nz)))
-  ny:set(push3(nxnz) * (ny:length() / (nxnz:length() + 1e-30)))
+  nz:set(push3(nx):cross(ny))
+  ny:set(push3(nx):cross(-push3(nz)))
+  nx:normalize()
+  ny:normalize()
+  nz:normalize()
 
   if not self.camBase or self.cameraResetted > 0 then
     -- this needs to happen here as on init the node data is not existing yet
     if self.offset and self.offset.x and nx:length() ~= 0 and ny:length() ~= 0 then
-      self.camBase = vec3(self.offset.x / nx:length(), self.offset.y / ny:length(), self.offset.z / nz:length())
+      self.camBase = vec3(self.offset.x, self.offset.y, self.offset.z)
       self.camOffset2 = nx * self.camBase.x + ny * self.camBase.y + nz * self.camBase.z
       if self.target then
         targetPos = data.pos + ref
@@ -308,9 +294,8 @@ function C:update(data)
   else
     newCamDist = self.camDist + zoomChange * dtfactor * adjustedSpeed * 0.0001 * core_camera.getFovDeg()
   end
-  --DynamiCam
   self.camDist = clamp(newCamDist, self.camMinDist, self.camMaxDist or math.huge)
-  --DynamiCam
+
   if nx:squaredLength() == 0 or ny:squaredLength() == 0 then
     data.res.pos = data.pos
     data.res.rot = quatFromDir(vecY, vecZ)
@@ -388,7 +373,7 @@ function C:update(data)
 
   if data.lookBack then
     rotB = lookBackVec
-    dirB = back
+    dirB = back - ref
   end
 
   calculatedCamPos:set(
@@ -410,144 +395,22 @@ function C:update(data)
   self.camLastDist = dist
   self.cameraResetted = math.max(self.cameraResetted - 1, 0)
 
+  local velocity = math.min(data.vel:length(), 70)
+  -- This is a hack. When the DT is exactly one, expect weird things to happen to velocity. This typically happens during the first frame of vehicle spawn
+  if data.dt == 1 then
+    velocity = 0
+  end
+  local smoothedVelocity = math.max(self.smoothedVelocity:get(velocity, data.dt) * 0.05 - 0.2, 0.0)
+  local lengthValue = math.min((1.4 * smoothedVelocity) / (smoothedVelocity + 4.1), 1)
+  local dynamicPitch = -self.maxDynamicPitch * lengthValue
+  local dynamicPitchQuat = quatFromEuler(dynamicPitch, 0, 0)
+
   -- application
-  --#endregion vanillaOrbitCode
-
---#region DynamiCam
-  -- check if the variable vehicleData.prevVelocity exists
-
-  local constants = {
-    acceleration = {
-      smoother = {
-        ---@type number
-        inRate  = 12,
-
-        ---@type number
-        outRate = 116,
-
-        ---@type number
-        deltaTime = 0.0334
-      },
-      cameraShake = {
-        ---@type LuaVec3
-        amplitude = vec3(15, 15, 15),
-
-        ---@type LuaVec3
-        frequency = vec3(0.03, 0.03, 0.03)
-      },
-      ---@type LuaVec3
-      offsetCoefficient = vec3(1, 1, 1)
-    },
-    velocity = {
-      cameraShake = {
-        ---@type LuaVec3
-        amplitude = vec3(1, 1, 1),
-
-        ---@type LuaVec3
-        frequency = vec3(0.03, 0.03, 0.03)
-      },
-      ---@type LuaVec3
-      offsetCoefficient = vec3(1, 1, 1)
-    }
-  }
-
-  --#region declare vehicleData
-  if type(vehicleData) ~= "nil" then vehicleData.previousVelocity = data.veh:getVelocity() end
-  local vehicleData = {
-    ---@type LuaVec3
-    velocity = data.veh:getVelocity(),
-
-    ---@type LuaVec3
-    previousVelocity = vec3(0,0,0),
-
-    acceleration = {
-      ---@type LuaVec3
-      rawToSmoothed = vec3(0,0,0)
-    },
-    vectors = {
-      ---@type LuaVec3
-      forward = data.veh:getDirectionVector(),
-
-      ---@type LuaVec3
-      up      = data.veh:getDirectionVectorUp(),
-
-      ---@type LuaVec3
-      --right   = data.veh:getDirectionVectorRightXYZ(),
-
-      ---@type LuaQuat
-      directionQuaternion = nil
-    }
-  }
-    ---@type LuaQuat
-  vehicleData.vectors.directionQuaternion = quatFromDir(vehicleData.vectors.forward, vehicleData.vectors.up)
-
-  local accelerationSmoother = newTemporalSmoothingNonLinear(constants.acceleration.smoother.inRate, constants.acceleration.smoother.outRate)
-
-  vehicleData.acceleration.rawToSmoothed = vehicleData.vectors.directionQuaternion:inversed()*vehicleData.velocity - vehicleData.vectors.directionQuaternion:inversed()*vehicleData.previousVelocity
-  for i, _ in pairs(vehicleData.acceleration.rawToSmoothed:toDict()) do
-    vehicleData.acceleration.rawToSmoothed[i] = accelerationSmoother:get(vehicleData.acceleration.rawToSmoothed[i], constants.acceleration.smoother.deltaTime)
-  end
-  --#endregion declare vehicleData
-
-  --Bootstrap the boilerplate camera data values
-  if type(customDynamiCamData) ~= "nil" then
-    customDynamiCamData.offsetCausedByAcceleration,
-    customDynamiCamData.offsetCausedByVelocity
-    = vec3(0,0,0), vec3(0,0,0)
-  end
-
-  local customDynamiCamData = {
-    ---@type LuaVec3
-    offsetCausedByAcceleration = vec3(0,0,0),
-
-    ---@type LuaVec3
-    offsetCausedByVelocity     = vec3(0,0,0)
-  }
-
-  local rand2pi = 2*math.pi * math.random()
-  customDynamiCamData.offsetCausedByAcceleration:setAdd(
-    (
-      vec3(vehicleData.acceleration.rawToSmoothed)
-      * constants.acceleration.offsetCoefficient
-    )
-    +
-    (
-      constants.acceleration.cameraShake.amplitude
-      * sinVec3(
-        constants.acceleration.cameraShake.frequency * vec3(rand2pi, rand2pi, rand2pi)
-      )
-    )
-  )
-
-  rand2pi = 2*math.pi * math.random()
-  customDynamiCamData.offsetCausedByVelocity:setAdd(
-    (
-      vehicleData.velocity
-      * constants.velocity.offsetCoefficient
-    )
-    +
-    (
-      constants.velocity.cameraShake.amplitude
-      * sinVec3(
-        constants.velocity.cameraShake.frequency * vec3(rand2pi, rand2pi, rand2pi)
-      )
-    )
-  )
-
-  local finalOffset = (customDynamiCamData.randomCameraShakeOffset + customDynamiCamData.offsetCausedByAcceleration + customDynamiCamData.offsetCausedByVelocity) * vehicleData.vectors.forward
-
-  --TODO: Use core_camera.setOffset() and core_camera.setRotation() for applying the custom camera position
-  data.res.pos = camPos + finalOffset
---#endregion DynamiCam
-
---#region vanillaOrbitCode
-  data.res.rot = quatFromDir(push3(targetPos) - camPos)
+  data.res.pos = camPos + vec3(0, 0, lengthValue) * self.maxDynamicOffset
+  data.res.rot = dynamicPitchQuat * quatFromDir(push3(targetPos) - camPos)
   data.res.fov = fov
   data.res.targetPos:set(targetPos)
   self.collision:update(data)
-
-  dump(data.veh)
-
   return true
 end
 
@@ -559,4 +422,4 @@ return function(...)
   o:init()
   return o
 end
---#endregion vanillaOrbitCode
+
