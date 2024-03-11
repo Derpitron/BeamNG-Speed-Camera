@@ -435,8 +435,8 @@ function C:update(data)
         ---@type LuaVec3
         frequency = vec3(0.03, 0.03, 0.03)
       },
-      ---@type number
-      offsetCoefficient = 1
+      ---@type LuaVec3
+      offsetCoefficient = vec3(1, 1, 1)
     },
     velocity = {
       cameraShake = {
@@ -446,8 +446,8 @@ function C:update(data)
         ---@type LuaVec3
         frequency = vec3(0.03, 0.03, 0.03)
       },
-      ---@type number
-      offsetCoefficient = 1
+      ---@type LuaVec3
+      offsetCoefficient = vec3(1, 1, 1)
     }
   }
 
@@ -507,13 +507,14 @@ function C:update(data)
   local rand2pi = 2*math.pi * math.random()
   customDynamiCamData.offsetCausedByAcceleration:setAdd(
     (
-      vehicleData.acceleration.rawToSmoothed
-      * vec3(constants.acceleration.offsetCoefficient, constants.acceleration.offsetCoefficient, constants.acceleration.offsetCoefficient)
+      vec3(vehicleData.acceleration.rawToSmoothed)
+      * constants.acceleration.offsetCoefficient
     )
-    + (
+    +
+    (
       constants.acceleration.cameraShake.amplitude
       * sinVec3(
-          constants.acceleration.cameraShake.frequency * vec3(rand2pi, rand2pi, rand2pi)
+        constants.acceleration.cameraShake.frequency * vec3(rand2pi, rand2pi, rand2pi)
       )
     )
   )
@@ -522,18 +523,21 @@ function C:update(data)
   customDynamiCamData.offsetCausedByVelocity:setAdd(
     (
       vehicleData.velocity
-      * vec3(constants.velocity.offsetCoefficient, constants.velocity.offsetCoefficient, constants.velocity.offsetCoefficient)
+      * constants.velocity.offsetCoefficient
     )
-    + (
+    +
+    (
       constants.velocity.cameraShake.amplitude
       * sinVec3(
-          constants.velocity.cameraShake.frequency * vec3(rand2pi, rand2pi, rand2pi)
+        constants.velocity.cameraShake.frequency * vec3(rand2pi, rand2pi, rand2pi)
       )
     )
   )
 
+  local finalOffset = (customDynamiCamData.randomCameraShakeOffset + customDynamiCamData.offsetCausedByAcceleration + customDynamiCamData.offsetCausedByVelocity) * vehicleData.vectors.forward
+
   --TODO: Use core_camera.setOffset() and core_camera.setRotation() for applying the custom camera position
-  data.res.pos = camPos + (customDynamiCamData.randomCameraShakeOffset + customDynamiCamData.offsetCausedByAcceleration + customDynamiCamData.offsetCausedByVelocity) * vehicleData.vectors.forward
+  data.res.pos = camPos + finalOffset
 --#endregion DynamiCam
 
 --#region vanillaOrbitCode
