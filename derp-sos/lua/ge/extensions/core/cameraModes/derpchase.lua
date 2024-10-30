@@ -149,7 +149,6 @@ function C:update(data)
     self.camBase:set(0,0,0)
   end
 
-
   local targetPos
   if self.mode == 'center' then
     targetPos = data.veh:getBBCenter()
@@ -232,8 +231,34 @@ function C:update(data)
   -- application
   data.res.pos = camPos
   data.res.rot = qdir_target
-  data.res.fov = self.fov
+  data.res.fov = 80
   data.res.targetPos = targetPos
+
+  debugDrawer:drawSphere((targetPos):toPoint3F(), 0.05, ColorF(1,0,0,1))
+  debugDrawer:drawText((targetPos):toPoint3F(), String('targetPos:'..tostring(targetPos)), ColorF(0,0,0,1))
+
+  debugDrawer:drawSphere((calculatedCamPos):toPoint3F(), 0.05, ColorF(1,1,0,1))
+  debugDrawer:drawText((calculatedCamPos):toPoint3F(), String('calculatedCamPos:'..tostring(calculatedCamPos)), ColorF(0,0,0,1))
+
+  debugDrawer:drawLine((calculatedCamPos):toPoint3F(), (targetPos):toPoint3F(), ColorF(0.707,0.707,0,1))
+
+  debugDrawer:drawLine((ref):toPoint3F(), (left):toPoint3F(), ColorF(1, 0, 0, 1))
+  debugDrawer:drawLine((ref):toPoint3F(), (back):toPoint3F(), ColorF(0, 1, 0, 1))
+  debugDrawer:drawLine((ref):toPoint3F(), (up):toPoint3F(),   ColorF(0, 0, 1, 1))
+
+  debugDrawer:drawSphere((ref):toPoint3F(), 0.05, ColorF(0,0,0,1))
+  debugDrawer:drawText((ref):toPoint3F(), String('ref:'..tostring(ref)), ColorF(0,0,0,1))
+
+  debugDrawer:drawSphere((left):toPoint3F(), 0.05, ColorF(1,0,0,1))
+  debugDrawer:drawText((left):toPoint3F(), String('left:'..tostring(left)), ColorF(0.8,0,0,1))
+
+  debugDrawer:drawSphere((back):toPoint3F(), 0.05, ColorF(0,1,0,1))
+  debugDrawer:drawText((back):toPoint3F(), String('back:'..tostring(back)), ColorF(0,0.8,0,1))
+
+  debugDrawer:drawSphere((up):toPoint3F(), 0.05, ColorF(0,0,1,1))
+  debugDrawer:drawText((up):toPoint3F(), String('up:'..tostring(up)), ColorF(0,0,0.8,1))
+
+  -- I want the camera's own direction vectors.
 
   self.collision:update(data)
   return true
