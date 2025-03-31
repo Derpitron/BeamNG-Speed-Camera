@@ -371,8 +371,6 @@ function C:update(data)
   --#endregion theircode
 
   --#region MY CODE
-  print("hi chellam")
-
   local left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin = (left - ref); left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin
       :normalize()
 
@@ -398,7 +396,7 @@ function C:update(data)
   --Rate_variable_derived_position_offset{enabled_boolean=true, rate_variable_vec3=data.vel, direction_vectors_vec3_vec3=camera_direction_vectors} +
   --Rate_variable_derived_position_offset{enabled_boolean=true, rate_variable_vec3=data.acc, direction_vectors_vec3_vec3=   car_direction_vectors}
 
-  local final_fov_offset_scalar -- =
+  local final_fov_offset_scalar = -20
   --Rate_variable_derived_fov_offset{enabled_boolean=vtrue, rate_variable_vec3=data.vel} +
   --Rate_variable_derived_fov_offset{enabled_boolean=true, rate_variable_vec3=data.acc}
 
@@ -406,22 +404,22 @@ function C:update(data)
 
   -- FINAL FINAL FINAL application
   --data.res.pos                           = gnd_cam_pos + final_offset_vec3
-  --data.res.fov                           = gnd_cam_fov + final_fov_offset_scalar
+  data.res.fov                           = gnd_cam_fov + final_fov_offset_scalar
   --data.res.rot                           = gnd_cam_rot * final_orientation_offset_quat
 
   -- This is extra metadata we pass back to the camera for the next frame.
   -- I.e we trick the camera into believing nothing is amiss and it calculates everything as vanilla.
-  --data.res.pos                    = gnd_cam_pos
-  --data.res.fov                    = gnd_cam_fov
-  --data.res.rot                    = gnd_cam_rot
-  --data.res.targetPos                  = gnd_target_pos
+  --data.res.pos_gnd                    = gnd_cam_pos
+  data.res.fov_gnd                    = gnd_cam_fov
+  --data.res.rot_gnd                    = gnd_cam_rot
+  --data.res.targetPos_gnd              = gnd_target_pos
 
   --#endregion
 
   -- application
   data.res.pos       = gnd_cam_pos
   data.res.rot       = gnd_cam_rot
-  data.res.fov       = gnd_cam_fov
+  --data.res.fov       = gnd_cam_fov
   data.res.targetPos = gnd_target_pos
 
   self.collision:update(data)
