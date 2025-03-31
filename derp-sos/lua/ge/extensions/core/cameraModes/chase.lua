@@ -370,11 +370,50 @@ function C:update(data)
 
     --#endregion theircode
 
-    -- application
-    data.res.pos = camPos
-    data.res.rot = qdir_target
-    data.res.fov = self.fov
-    data.res.targetPos = targetPos
+	--#region MY CODE
+	local left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin = (left - ref); left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin:normalize()
+
+	local car_dirvec_left    = left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin
+	local car_dirvec_back    = dir
+	local car_dirvec_up      = up
+	-- TODO Idk if the below 3 lines even work. and is the backwards vector backwards wrt the car or global?
+	local cam_dirvec_left = qdir_target * vec3(1, 0, 0)
+	local cam_dirvec_back = qdir_target * vec3(0, 1, 0)
+	local cam_dirvec_up   = qdir_target * vec3(0, 0, 1)
+
+	local car_direction_vectors            = {x=car_dirvec_left, y=car_dirvec_back, z=car_dirvec_up}
+	local camera_direction_vectors         = {x=cam_dirvec_left, y=cam_dirvec_back, z=cam_dirvec_up}
+
+    --gnd stands for ground, as in ground-state
+	local gnd_cam_pos     = camPos
+	local gnd_cam_fov     = 65
+	local gnd_cam_rot     = qdir_target
+	local gnd_target_pos  = targetPos
+
+	-- USERS DEFINE YOUR EFFECTS HERE.
+	local final_offset_vec3 -- =
+	--Rate_variable_derived_position_offset{enabled_boolean=true, rate_variable_vec3=data.vel, direction_vectors_vec3_vec3=camera_direction_vectors} +
+	--Rate_variable_derived_position_offset{enabled_boolean=true, rate_variable_vec3=data.acc, direction_vectors_vec3_vec3=   car_direction_vectors}
+
+	local final_fov_offset_scalar -- =
+	--Rate_variable_derived_fov_offset{enabled_boolean=vtrue, rate_variable_vec3=data.vel} +
+	--Rate_variable_derived_fov_offset{enabled_boolean=true, rate_variable_vec3=data.acc}
+
+	local final_orientation_offset_quat -- =
+
+	-- FINAL FINAL FINAL application
+	data.res.pos                           = gnd_cam_pos + final_offset_vec3
+	data.res.fov                           = gnd_cam_fov + final_fov_offset_scalar
+	data.res.rot                           = gnd_cam_rot * final_orientation_offset_quat
+
+	-- This is extra metadata we pass back to the camera for the next frame.
+	-- I.e we trick the camera into believing nothing is amiss and it calculates everything as vanilla.
+	data.res.pos_gnd                    = gnd_cam_pos
+	data.res.fov_gnd                    = gnd_cam_fov
+	data.res.rot_gnd                    = gnd_cam_rot
+	data.res.targetPos                  = gnd_target_pos
+
+	--#endregion
 
     self.collision:update(data)
     return true

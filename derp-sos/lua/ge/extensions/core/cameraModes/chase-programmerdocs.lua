@@ -437,8 +437,7 @@ function C:update(data)
 	self.camResetted = math.max(self.camResetted - 1, 0)
 
 	--#region MY CODE
-	local left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin = (left_vec3_point_relativeto_carorigin - ref_vec3_point_carorigin_relativeto_carorigin); left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin
-		:normalized()
+	local left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin = (left_vec3_point_relativeto_carorigin - ref_vec3_point_carorigin_relativeto_carorigin); left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin:normalized()
 
 	local car_direction_vector_leftward    = left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin
 	local car_direction_vector_backward    = dir_vec3_metres_backwardfacing_car_unitvector_relativeto_carorigin
