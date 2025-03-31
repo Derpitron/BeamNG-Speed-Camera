@@ -2,8 +2,8 @@
 -- If a copy of the bCDDL was not distributed with this
 -- file, You can obtain one at http://beamng.com/bCDDL-1.1.txt
 
-local vecY = vec3(0,1,0)
-local vecZ = vec3(0,0,1)
+local vecY = vec3(0, 1, 0)
+local vecZ = vec3(0, 0, 1)
 
 local collision = require('core/cameraModes/collision')
 
@@ -54,7 +54,7 @@ end
 function C:onSettingsChanged()
   self.relaxation = settings.getValue('cameraOrbitRelaxation') or 3
   self.rollSmoothing = math.max(settings.getValue('cameraChaseRollSmoothing') or 1, 0.000001)
-  self:reset() --TODO is this really necessary?
+  self:reset()   --TODO is this really necessary?
 end
 
 function C:reset()
@@ -66,19 +66,156 @@ function C:reset()
   self.relPitch = 0
 end
 
+--#region myfunctions
+
+---All the following functions must do is provide a INTERFACE. No logic, no constants, no presets.
+---CONSTANT MODIFIERS, PHASE 0
+---PHASE 0 is a lightweight wrapper over vanilla camera that the user may use to provide discrete and constant tweaks to orientation, offset, and FOV.
+-- users they want to set a constant absolute offset (eg x -> fov = x), nothing potentially recursive
+function Constant_user_defined_position_offset(
+    enabled_boolean,
+    additive_offset_vec3,
+    direction_vectors_vec3_vec3
+)
+  --#region Constant_user_defined_offset function body
+  local offset_contribution_vec3 = vec3(0, 0, 0)
+  if enabled_boolean == true then
+    --Unrolling the tables for performance
+    local x_leftward_unit_vector_vec3 = direction_vectors_vec3_vec3.x
+    local y_backward_unit_vector_vec3 = direction_vectors_vec3_vec3.y
+    local z_upward_unit_vector_vec3   = direction_vectors_vec3_vec3.z
+
+    --Apply our offset calculations to our piece of the offset pie.
+    --We are responsible only for cooking this relative value'd vec3 and when we return it we do not care what else happens
+    offset_contribution_vec3          =
+        vec3(
+          x_leftward_unit_vector_vec3 * additive_offset_vec3.x +
+          y_backward_unit_vector_vec3 * additive_offset_vec3.y +
+          z_upward_unit_vector_vec3 * additive_offset_vec3.z
+        )
+  end
+  return offset_contribution_vec3
+  --#endregion Constant_user_defined_offset function body
+end
+
+function Constant_user_defined_fov_offset(
+    enabled_boolean,
+    additive_fov_offset_scalar_degree
+)
+  --#region Constant_user_defined_fov_offset function body
+  local offset_contribution_vec3 = 0
+  if enabled_boolean == true then
+    --Apply our offset calculations to our piece of the offset pie.
+    --We are responsible only for cooking this relative value'd scalar and when we return it we do not care what else happens
+    offset_contribution_vec3 = additive_fov_offset_scalar_degree
+  end
+  return offset_contribution_vec3
+  --#endregion Constant_user_defined_fov_offset function body
+end
+
+---CONDITIONAL MODIFIERS, PHASE 1
+---These modifiers are for "constant" effects like offset/orientation depending on some rate variable/time series quantity e.g velocity, acceleration
+---These must settle back to the mean position of VANILLA when the conditions.
+-- POSITION MODIFIER
+function Rate_variable_derived_position_offset(
+    enabled_boolean,
+    rate_variable_vec3,
+    direction_vectors_vec3_vec3,
+    multiplicative_constant_value_coefficients_vec3,
+    variable_clamp_ranges_vec3_vec2, --TODO: allow partial filling in of clamp ranges. e.g clamp only x and y, and z should not be passed in, then handle that
+    variable_smoother_function,      --TODO: define a schema for variable_smoother_function. e.g func(var, dt)
+    dt
+)
+  --#region rate_variable_derived_offset function body
+  local offset_contribution_vec3 = vec3(0, 0, 0)
+  if enabled_boolean == true then
+    -- Clamping the components of time-series variable with the clamp ranges specified per component
+    if variable_clamp_ranges_vec3_vec2 then
+      --Unrolling the tables for performance
+      local variable_clamp_range_x = variable_clamp_ranges_vec3_vec2.x
+      local variable_clamp_range_y = variable_clamp_ranges_vec3_vec2.y
+      local variable_clamp_range_z = variable_clamp_ranges_vec3_vec2.z
+
+      --CLAMP!
+      rate_variable_vec3 =
+          vec3(
+            clamp(rate_variable_vec3.x, variable_clamp_range_x[1], variable_clamp_range_x[2]),
+            clamp(rate_variable_vec3.x, variable_clamp_range_y[1], variable_clamp_range_y[2]),
+            clamp(rate_variable_vec3.x, variable_clamp_range_z[1], variable_clamp_range_z[2])
+          )
+    end
+
+    --Unrolling the tables for performance
+    local x_leftward_unit_vector_vec3 = direction_vectors_vec3_vec3.x
+    local y_backward_unit_vector_vec3 = direction_vectors_vec3_vec3.y
+    local z_upward_unit_vector_vec3   = direction_vectors_vec3_vec3.z
+
+    if variable_smoother_function == nil then
+      local function smoothing_function(var, dt)
+        return var
+      end
+    end
+
+    --Apply our offset calculations to our piece of the offset pie.
+    --We are responsible only for cooking this relative value'd vec3 and when we return it we do not care what else happens
+    offset_contribution_vec3 =
+        vec3(
+          x_leftward_unit_vector_vec3 * multiplicative_constant_value_coefficients_vec3.x *
+          variable_smoother_function(rate_variable_vec3.x, dt) +
+          y_backward_unit_vector_vec3 * multiplicative_constant_value_coefficients_vec3.y *
+          variable_smoother_function(rate_variable_vec3.y, dt) +
+          z_upward_unit_vector_vec3 * multiplicative_constant_value_coefficients_vec3.z *
+          variable_smoother_function(rate_variable_vec3.z, dt)
+        )
+  end
+  return offset_contribution_vec3
+  --#endregion rate_variable_derived_offset function body
+end
+
+--FOV MODIFIER
+function Rate_variable_derived_fov_offset(
+    enabled_boolean,
+    rate_variable_vec3,
+    coefficient_scalar,
+    clamp_range_vec2,
+    variable_smoothing_function
+)
+  --#region rate_variable_derived_fov_offset function body
+  local fov_offset_contribution_scalar = 0
+  if enabled_boolean == true then
+    local rate_variable_magnitude = rate_variable_vec3:length()
+    -- Clamping the magnitude of rate_variable
+    if clamp_range_vec2 then
+      --CLAMP!
+      rate_variable_magnitude = clamp(rate_variable_magnitude, clamp_range_vec2[1], clamp_range_vec2[2])
+    end
+
+    --Apply our offset calculations to our piece of the offset pie.
+    -- We are responsible only for cooking this relative value'd vec3 and when we return it we do not care what else happens
+    fov_offset_contribution_scalar = coefficient_scalar *
+        variable_smoothing_function(rate_variable_magnitude, data.dt)
+  end
+  return fov_offset_contribution_scalar
+  --#endregion rate_variable_derived_fov_offset function body
+end
+
+--#endregion myfunctions
+
 local rot = vec3()
 function C:update(data)
+  --#region theircode
+
   data.res.collisionCompatible = true
   -- update input
-  local deadzone = 0.5
-  self.relYaw =   clamp(self.relYaw   + 0.15*MoveManager.yawRelative  , -1, 1)
-  self.relPitch = clamp(self.relPitch + 0.15*MoveManager.pitchRelative, -1, 1)
-  local relYawUsed   = self.relYaw
-  local relPitchUsed = self.relPitch
-  if math.abs(relYawUsed)   < deadzone then relYawUsed   = 0 end
+  local deadzone               = 0.5
+  self.relYaw                  = clamp(self.relYaw + 0.15 * MoveManager.yawRelative, -1, 1)
+  self.relPitch                = clamp(self.relPitch + 0.15 * MoveManager.pitchRelative, -1, 1)
+  local relYawUsed             = self.relYaw
+  local relPitchUsed           = self.relPitch
+  if math.abs(relYawUsed) < deadzone then relYawUsed = 0 end
   if math.abs(relPitchUsed) < deadzone then relPitchUsed = 0 end
 
-  local dx = 200*relYawUsed + 100*data.dt*(MoveManager.yawRight - MoveManager.yawLeft)
+  local dx = 200 * relYawUsed + 100 * data.dt * (MoveManager.yawRight - MoveManager.yawLeft)
   self.camRot.x = 0
   if not self.forwardLooking then
     self.camRot.x = -180
@@ -95,7 +232,7 @@ function C:update(data)
     self.camRot.x = -self.camRot.x
   end
 
-  local dy = 200*relPitchUsed + 100*data.dt*(MoveManager.pitchUp - MoveManager.pitchDown)
+  local dy = 200 * relPitchUsed + 100 * data.dt * (MoveManager.pitchUp - MoveManager.pitchDown)
   self.camRot.y = self.defaultRotation.y
   if dy > triggerValue then
     self.camRot.y = self.defaultRotation.y + 30
@@ -132,8 +269,8 @@ function C:update(data)
   local back = data.veh:getNodePosition(self.refNodes.back)
 
   -- calculate the camera offset: rotate with the vehicle
-  local nx = left - ref
-  local ny = back - ref
+  local nx   = left - ref
+  local ny   = back - ref
 
   if nx:squaredLength() == 0 or ny:squaredLength() == 0 then
     data.res.pos = data.pos
@@ -144,9 +281,10 @@ function C:update(data)
   local nz = nx:cross(ny):normalized()
 
   if self.offset and self.offset.x then
-    self.camBase:set(self.offset.x / (nx:length() + 1e-30), self.offset.y / (ny:length() + 1e-30), self.offset.z / (nz:length() + 1e-30))
+    self.camBase:set(self.offset.x / (nx:length() + 1e-30), self.offset.y / (ny:length() + 1e-30),
+      self.offset.z / (nz:length() + 1e-30))
   else
-    self.camBase:set(0,0,0)
+    self.camBase:set(0, 0, 0)
   end
 
 
@@ -174,7 +312,8 @@ function C:update(data)
       -- if rolling is disabled, we are always up no matter what ...
       up:set(vecZ)
     end
-    dir:set(self.dirSmoothX:getUncapped(dir.x, data.dt*1000), self.dirSmoothY:getUncapped(dir.y, data.dt*1000), self.dirSmoothZ:getUncapped(dir.z, data.dt*1000)); dir:normalize()
+    dir:set(self.dirSmoothX:getUncapped(dir.x, data.dt * 1000), self.dirSmoothY:getUncapped(dir.y, data.dt * 1000),
+      self.dirSmoothZ:getUncapped(dir.z, data.dt * 1000)); dir:normalize()
   end
   self.camLastUp:set(up)
 
@@ -212,7 +351,7 @@ function C:update(data)
   local dist = 1 / (ratio + 1) * self.camDist + (ratio / (ratio + 1)) * self.camLastDist
 
   local calculatedCamPos = dist * vec3(
-     math.sin(rot.x) * math.cos(rot.y)
+    math.sin(rot.x) * math.cos(rot.y)
     , math.cos(rot.x) * math.cos(rot.y)
     , math.sin(rot.y)
   )
@@ -229,11 +368,61 @@ function C:update(data)
   self.camLastDist = dist
   self.camResetted = math.max(self.camResetted - 1, 0)
 
+  --#endregion theircode
+
+  --#region MY CODE
+  print("hi chellam")
+
+  local left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin = (left - ref); left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin
+      :normalize()
+
+  local car_dirvec_left          = left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin
+  local car_dirvec_back          = dir
+  local car_dirvec_up            = up
+  -- TODO Idk if the below 3 lines even work. and is the backwards vector backwards wrt the car or global?
+  local cam_dirvec_left          = qdir_target * vec3(1, 0, 0)
+  local cam_dirvec_back          = qdir_target * vec3(0, 1, 0)
+  local cam_dirvec_up            = qdir_target * vec3(0, 0, 1)
+
+  local car_direction_vectors    = { x = car_dirvec_left, y = car_dirvec_back, z = car_dirvec_up }
+  local camera_direction_vectors = { x = cam_dirvec_left, y = cam_dirvec_back, z = cam_dirvec_up }
+
+  --gnd stands for ground, as in ground-state
+  local gnd_cam_pos    = camPos
+  local gnd_cam_rot    = qdir_target
+  local gnd_cam_fov    = self.fov
+  local gnd_target_pos = targetPos
+
+  -- USERS DEFINE YOUR EFFECTS HERE.
+  local final_offset_vec3 -- =
+  --Rate_variable_derived_position_offset{enabled_boolean=true, rate_variable_vec3=data.vel, direction_vectors_vec3_vec3=camera_direction_vectors} +
+  --Rate_variable_derived_position_offset{enabled_boolean=true, rate_variable_vec3=data.acc, direction_vectors_vec3_vec3=   car_direction_vectors}
+
+  local final_fov_offset_scalar -- =
+  --Rate_variable_derived_fov_offset{enabled_boolean=vtrue, rate_variable_vec3=data.vel} +
+  --Rate_variable_derived_fov_offset{enabled_boolean=true, rate_variable_vec3=data.acc}
+
+  local final_orientation_offset_quat -- =
+
+  -- FINAL FINAL FINAL application
+  --data.res.pos                           = gnd_cam_pos + final_offset_vec3
+  --data.res.fov                           = gnd_cam_fov + final_fov_offset_scalar
+  --data.res.rot                           = gnd_cam_rot * final_orientation_offset_quat
+
+  -- This is extra metadata we pass back to the camera for the next frame.
+  -- I.e we trick the camera into believing nothing is amiss and it calculates everything as vanilla.
+  --data.res.pos                    = gnd_cam_pos
+  --data.res.fov                    = gnd_cam_fov
+  --data.res.rot                    = gnd_cam_rot
+  --data.res.targetPos                  = gnd_target_pos
+
+  --#endregion
+
   -- application
-  data.res.pos = camPos
-  data.res.rot = qdir_target
-  data.res.fov = self.fov
-  data.res.targetPos = targetPos
+  data.res.pos       = gnd_cam_pos
+  data.res.rot       = gnd_cam_rot
+  data.res.fov       = gnd_cam_fov
+  data.res.targetPos = gnd_target_pos
 
   self.collision:update(data)
   return true
