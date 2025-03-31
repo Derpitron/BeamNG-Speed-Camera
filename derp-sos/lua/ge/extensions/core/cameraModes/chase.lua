@@ -208,7 +208,7 @@ function C:update(data)
 		-1, 1)
 	local relYawUsed                     = self.relative_Yaw_degreesBydegrees
 	local relPitchUsed                   = self.relative_Pitch_degreesBydegrees
-	-- Dont register any fucking camera rotation unless user moves the mouse more than such that the value of the above bullshit is greater than "0.5" deadzone
+	-- Dont register any  camera rotation unless user moves the mouse more than such that the value of the above bullshit is greater than "0.5" deadzone
 	if math.abs(relYawUsed) < deadzone then relYawUsed = 0 end
 	if math.abs(relPitchUsed) < deadzone then relPitchUsed = 0 end
 
@@ -458,16 +458,16 @@ function C:update(data)
 	--- TO IMPLEMENT
 	-- orientation: defined as the camera spinning about its own axes.
 	-- For single letter codes after functions, check the design document's table.
-	-- TODO: What the fuck is an impact/collision? How can we quantify it? How does NFS rivals/heat/unbound do it? How does assetto corsa Kirbycam do it?
-	-- TODO: The children yearn for smoothing and interpolation. Find out how the fuck one implements smoothing, and what smoothie functions/dt/etc to use?
+	-- TODO: What is an impact/collision? How can we quantify it? How does NFS rivals/heat/unbound do it? How does assetto corsa Kirbycam do it?
+	-- TODO: smoothing and interpolation. Find out how one implements smoothing, and what smooth functions/dt/etc to use?
 	-- TODO: See about exposing these functions to global namespace so that any module or script could call it?
 	-- TODO: Inspect BeamNG World Editor's World and Local rotation again? We need to find out how the shit we implement J and N in my design document.
 	-- TODO: Do impact based effects fall into PHASE 2: PERIODIC EFFECTS, or should they be a discrete PHASE 3?
 	--
 	-- I think of the phases like a stack where each item at the top is the latest in the pipeline.
 	-- {vanilla_camera, PHASE 0, PHASE 1, PHASE 2}
-	-- Never fuck with vanilla_camera. It is sacred and no function here should be allowed to tamper with it's calculations.
-	-- PHASE 2 mustn't fuck with PHASE 1.
+	-- Never mess with vanilla_camera. It is sacred and no function here should be allowed to tamper with it's calculations.
+	-- PHASE 2 mustn't mess with PHASE 1.
 	-- PHASE 2 thinks of PHASE 1 as it's mean/ground state position to return to.
 	-- PHASE 1 Thinks of PHASE 0 as it's mean/ground state position to return to.
 	-- PHASE 0 reverts back to vanilla_camera if the user doesn't change anything in it.                -- K (I think) (Where should this go? If user wants Dolly Zoom, it Must somehow override any other position/FOV settings.)
@@ -485,7 +485,7 @@ function C:update(data)
 	local final_orientation_offset_quat -- =
 
 	-- FINAL FINAL FINAL application
-	-- thta means APPLYING the FUCKING cooked values to the CAMERA RAHHHHH
+	-- thta means APPLYING the cooked values to the CAMERA RAHHHHH
 	-- These are the data to be applied to the real camera itself
 	-- I.e what the user sees.
 	data.res.pos                           = ground_state_camera_position + final_offset_vec3

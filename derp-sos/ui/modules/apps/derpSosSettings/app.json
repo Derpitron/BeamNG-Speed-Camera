@@ -1,0 +1,16 @@
+{
+  "name" : "DerpSosSettings",
+  "author": "Derpitron",
+  "description": "Customize the position and rotation of the DerpSOS_Camera",
+  "types": [
+    "ui.apps.categories.debug"
+  ],
+  "directive": "derpSosSettings",
+  "domElement": "<derpsos-settings></derpsos-settings>",
+  "css": { 
+    "width": "420px",
+    "height": "640px"
+  },
+  "preserveAspectRatio": false,
+  "version": "1.0"
+}
