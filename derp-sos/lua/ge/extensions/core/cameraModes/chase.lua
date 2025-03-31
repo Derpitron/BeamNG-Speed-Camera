@@ -23,6 +23,7 @@ function C:init()
   self.lastRefPos = vec3()
   self.camLastUp = vec3()
   self.camResetted = 0
+  self.t = 0
 
   self.collision = collision()
   self.collision:init()
@@ -64,9 +65,14 @@ function C:reset()
   self.camResetted = 2
   self.relYaw = 0
   self.relPitch = 0
+  self.t = 0
 end
 
 --#region myfunctions
+
+local function fuzzyEqual( x, y, delta )
+  return math.abs( x - y ) <= ( delta or .0001 )
+end
 
 ---All the following functions must do is provide a INTERFACE. No logic, no constants, no presets.
 ---CONSTANT MODIFIERS, PHASE 0
@@ -392,11 +398,27 @@ function C:update(data)
   local gnd_target_pos = targetPos
 
   -- USERS DEFINE YOUR EFFECTS HERE.
+  -- TODO: rotation
   local final_offset_vec3 -- =
   --Rate_variable_derived_position_offset{enabled_boolean=true, rate_variable_vec3=data.vel, direction_vectors_vec3_vec3=camera_direction_vectors} +
   --Rate_variable_derived_position_offset{enabled_boolean=true, rate_variable_vec3=data.acc, direction_vectors_vec3_vec3=   car_direction_vectors}
 
-  local final_fov_offset_scalar = -20
+  local f = 1
+  local a = 10
+
+  --sin(2pi*f*t) has a period 2l of 2pi
+  --every period 2pi, we reset the value of 2pi*f*t to be 0 here
+  --if 2pif*sum(dt) = 2pi
+  --to set all of it back to 0, :sum(dt)) should = 1-freq
+  --here, t is the continual sum of dt.
+  if (f*self.t > 1) then -- if self.sum = 1/frequency? we want relative equality checking here.
+    self.t = self.t - 1/f
+  end
+  self.t = self.t + data.dt
+
+
+
+  local final_fov_offset_scalar = a*math.sin((f*2*math.pi)*self.t) --A*sin(wt)
   --Rate_variable_derived_fov_offset{enabled_boolean=vtrue, rate_variable_vec3=data.vel} +
   --Rate_variable_derived_fov_offset{enabled_boolean=true, rate_variable_vec3=data.acc}
 
@@ -419,7 +441,6 @@ function C:update(data)
   -- application
   data.res.pos       = gnd_cam_pos
   data.res.rot       = gnd_cam_rot
-  --data.res.fov       = gnd_cam_fov
   data.res.targetPos = gnd_target_pos
 
   self.collision:update(data)
