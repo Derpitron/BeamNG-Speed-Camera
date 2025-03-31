@@ -377,8 +377,7 @@ function C:update(data)
   --#endregion theircode
 
   --#region MY CODE
-  local left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin = (left - ref); left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin
-      :normalize()
+  local left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin = (left - ref); left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin:normalize()
 
   local car_dirvec_left          = left_vec3_metres_leftfacing_car_unitvector_relativeto_carorigin
   local car_dirvec_back          = dir
@@ -415,8 +414,6 @@ function C:update(data)
     self.t = self.t - 1/f
   end
   self.t = self.t + data.dt
-
-
 
   local final_fov_offset_scalar = a*math.sin((f*2*math.pi)*self.t) --A*sin(wt)
   --Rate_variable_derived_fov_offset{enabled_boolean=vtrue, rate_variable_vec3=data.vel} +
