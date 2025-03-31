@@ -203,6 +203,8 @@ end
 
 local rot = vec3()
 function C:update(data)
+    --#region theircode
+
     data.res.collisionCompatible = true
     -- update input
     local deadzone               = 0.5
@@ -365,6 +367,8 @@ function C:update(data)
     self.camLastRot:set(rot)
     self.camLastDist = dist
     self.camResetted = math.max(self.camResetted - 1, 0)
+
+    --#endregion theircode
 
     -- application
     data.res.pos = camPos
