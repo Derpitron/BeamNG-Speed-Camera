@@ -386,7 +386,7 @@ function C:update(data)
 
     --gnd stands for ground, as in ground-state
 	local gnd_cam_pos     = camPos
-	local gnd_cam_fov     = 65
+	local gnd_cam_fov     = self.fov
 	local gnd_cam_rot     = qdir_target
 	local gnd_target_pos  = targetPos
 
@@ -402,18 +402,24 @@ function C:update(data)
 	local final_orientation_offset_quat -- =
 
 	-- FINAL FINAL FINAL application
-	data.res.pos                           = gnd_cam_pos + final_offset_vec3
-	data.res.fov                           = gnd_cam_fov + final_fov_offset_scalar
-	data.res.rot                           = gnd_cam_rot * final_orientation_offset_quat
+	--data.res.pos                           = gnd_cam_pos + final_offset_vec3
+	--data.res.fov                           = gnd_cam_fov + final_fov_offset_scalar
+	--data.res.rot                           = gnd_cam_rot * final_orientation_offset_quat
 
 	-- This is extra metadata we pass back to the camera for the next frame.
 	-- I.e we trick the camera into believing nothing is amiss and it calculates everything as vanilla.
-	data.res.pos_gnd                    = gnd_cam_pos
-	data.res.fov_gnd                    = gnd_cam_fov
-	data.res.rot_gnd                    = gnd_cam_rot
-	data.res.targetPos                  = gnd_target_pos
+	--data.res.pos                    = gnd_cam_pos
+	--data.res.fov                    = gnd_cam_fov
+	--data.res.rot                    = gnd_cam_rot
+	--data.res.targetPos                  = gnd_target_pos
 
 	--#endregion
+
+    -- application
+    data.res.pos = camPos
+    data.res.rot = qdir_target
+    data.res.fov = self.fov
+    data.res.targetPos = targetPos
 
     self.collision:update(data)
     return true
