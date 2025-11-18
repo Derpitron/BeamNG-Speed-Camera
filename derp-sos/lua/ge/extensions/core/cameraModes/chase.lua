@@ -11,6 +11,29 @@ local function debuggy(point, text, color)
   print(text, dump(point))
 end
 
+-- Inverse of LuaQuat:setFromEuler(x,y,z)
+function getEulerForSetFromEuler(q)
+  -- q.x, q.y, q.z, q.w expected from your module's quaternion type
+  local qx, qy, qz, qw = q.x, q.y, q.z, q.w
+
+  -- rotation-matrix terms (standard quaternion -> rotation-matrix)
+  local R11 = 1 - 2 * (qy*qy + qz*qz)
+  local R21 = 2 * (qx*qy + qw*qz)
+  local R31 = 2 * (qx*qz - qw*qy)
+
+  local R22 = 1 - 2 * (qx*qx + qz*qz)
+  local R23 = 2 * (qy*qz - qw*qx)
+
+  -- Y-Z-X extraction: alpha = Y, beta = Z, gamma = X
+  local alpha = math.atan2(-R31, R11)                         -- Y
+  local beta  = math.asin( math.max(-1, math.min(1, R21)) )   -- Z (clamped)
+  local gamma = math.atan2(-R23, R22)                         -- X
+
+  -- return table as vec3(x=gamma, y=alpha, z=beta) ready for setFromEuler
+  return vec3(gamma, alpha, beta)
+end
+
+
 local collision = require('core/cameraModes/collision')
 
 local C = {}
@@ -30,6 +53,8 @@ function C:init()
   self.lastCamUp = vec3()
   self.camResetted = 0
 
+  self.dt = 0
+
   self.collision = collision()
   self.collision:init()
 
@@ -45,7 +70,7 @@ function C:onVehicleCameraConfigChanged()
     self.defaultRotation = vec3(self.defaultRotation)
     self.defaultRotation.y = -self.defaultRotation.y
   end
-  self.camRot_V = vec3(self.defaultRotation)
+  self.camRot_V_deg = vec3(self.defaultRotation)
   self.camMinDist = self.distanceMin or 3
   self.distance = self.distance or 5
   self.defaultDistance = self.distance
@@ -161,21 +186,31 @@ function C:update(data)
   
   
   local targetPos_g
+  local targetPos_g_unshimmed
   if self.mode == 'center' then
     targetPos_g = data.veh:getBBCenter()
   else
-    -- This is centred w.r.t the car. 
-    -- 
-    -- this is because `(nx_v * self.camBase_v.x)` is centred w.r.t the car.
+    -- This is centred w.r.t the car. this is because `(nx_v * self.camBase_v.x)` is centred w.r.t the car.
+    --SHIM HERE!
     local camOffset2_V =
       nx_v * self.camBase_v.x +
       ny_v * self.camBase_v.y +
       nz_v * self.camBase_v.z
 
-    -- This is centred w.r.t the car. 
-    -- 
-    -- this is because `camOffset2_V` is centred w.r.t the car.
+    local camOffset2_V_unshimmed =
+      nx_v * self.camBase_v.x +
+      ny_v * self.camBase_v.y +
+      nz_v * self.camBase_v.z
+
+      self.dt = self.dt + data.dt
+      if self.dt >= 3.14 then
+        self.dt = -3.14
+      end
+
+    -- This is centred w.r.t the car. this is because `camOffset2_V` is centred w.r.t the car.
     targetPos_g = data.pos + ref_v + camOffset2_V
+    targetPos_g_unshimmed = data.pos + ref_v + camOffset2_V_unshimmed
+    -- debuggy(targetPos_g, "targetPos_g", ColorF(1, 0, 0, 1))
   end
 
   local dir = (ref_v - back_v); dir:normalize()
@@ -241,6 +276,7 @@ function C:update(data)
 
   local dist_V = 1 / (ratio_V + 1) * self.camDist + (ratio_V / (ratio_V + 1)) * self.lastCamDist
 
+  --SHIM HERE!
   local camPos_V = dist_V * vec3(
       math.sin(rot_V_rad.x) * math.cos(rot_V_rad.y)
     , math.cos(rot_V_rad.x) * math.cos(rot_V_rad.y)
@@ -252,10 +288,22 @@ function C:update(data)
   local camPos_r = qdir_veh * camPos_V
 
   -- T_g is the "basis" or "point of reference" for C_g, when we apply C_V to it
-  local camPos_g = camPos_r + targetPos_g
+  local camPos_g = camPos_r + targetPos_g_unshimmed
 
   local dir_cam2target = (targetPos_g - camPos_g); dir_cam2target:normalize()
   local qdir_cam2target = quatFromDir(dir_cam2target, up)
+
+  -- we don't use toEulerYXZ because somehow it, and setFromEuler's formats, are not correspondent.
+  local edir_cam2target = getEulerForSetFromEuler(qdir_cam2target)
+  -- SHIM HERE!
+  -- the x,y,z rotations applied here seem to be "rotate around the corresponding x,y,z axes on grid,small,pure map."
+  -- angle: radians. this one's rotations is just the camera rotating on it's own point. it's not rotating around the targetPos_g.
+  -- TODO: modifying this is really weird and inconsistent with global direction. is it global or vehicle or camera scoped? find that out
+  qdir_cam2target:setFromEuler(
+    edir_cam2target.x,
+    edir_cam2target.y,
+    edir_cam2target.z
+  )
 
   self.lastCamRot:set(rot_V_rad)
   self.lastCamDist = dist_V
