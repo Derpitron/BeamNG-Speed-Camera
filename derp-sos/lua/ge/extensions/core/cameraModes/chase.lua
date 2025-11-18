@@ -2,8 +2,8 @@
 -- If a copy of the bCDDL was not distributed with this
 -- file, You can obtain one at http://beamng.com/bCDDL-1.1.txt
 
-local vecY = vec3(0,1,0)
-local vecZ = vec3(0,0,1)
+local collision = require('core/cameraModes/collision')
+
 
 local function debuggy(point, text, color)
   debugDrawer:drawSphere(point, 0.05, color, false)
@@ -33,8 +33,6 @@ local function getEulerForSetFromEuler(q)
   return vec3(gamma, alpha, beta)
 end
 
-
-local collision = require('core/cameraModes/collision')
 
 local C = {}
 C.__index = C
@@ -81,8 +79,8 @@ function C:onVehicleCameraConfigChanged()
 end
 
 function C:onSettingsChanged()
-  self.relaxation = settings.getValue('cameraOrbitRelaxation') or 3
-  self.rollSmoothing = math.max(settings.getValue('cameraChaseRollSmoothing') or 1, 0.000001)
+  -- self.relaxation = settings.getValue('cameraOrbitRelaxation') or 3
+  -- self.rollSmoothing = math.max(settings.getValue('cameraChaseRollSmoothing') or 1, 0.000001)
   self:reset() --TODO is this really necessary?
 end
 
@@ -97,44 +95,7 @@ end
 
 local rot_V_rad = vec3()
 function C:update(data)
-  data.res.collisionCompatible = true
-  -- update input
-  -- local deadzone = 0.5
-  -- self.relYaw =   clamp(self.relYaw   + 0.15*MoveManager.yawRelative  , -1, 1)
-  -- self.relPitch = clamp(self.relPitch + 0.15*MoveManager.pitchRelative, -1, 1)
-  -- local relYawUsed   = self.relYaw
-  -- local relPitchUsed = self.relPitch
-  -- if math.abs(relYawUsed)   < deadzone then relYawUsed   = 0 end
-  -- if math.abs(relPitchUsed) < deadzone then relPitchUsed = 0 end
-
-  -- local dx = 200*relYawUsed + 100*data.dt*(MoveManager.yawRight - MoveManager.yawLeft)
-  -- self.camRot_V_deg.x = 0
-  -- if not self.forwardLooking then
-    -- self.camRot_V_deg.x = -180
-  -- end
-
-  -- local triggerValue = 0.05
-
-  -- if dx > triggerValue then
-    -- self.camRot_V_deg.x = 90
-  -- elseif dx < -triggerValue then
-    -- self.camRot_V_deg.x = -90
-  -- end
-  -- if not self.forwardLooking then
-    -- self.camRot_V_deg.x = -self.camRot_V_deg.x
-  -- end
-
-  -- local dy = 200*relPitchUsed + 100*data.dt*(MoveManager.pitchUp - MoveManager.pitchDown)
   self.camRot_V_deg.y = self.defaultRotation.y
-  -- if dy > triggerValue then
-    -- self.camRot_V_deg.y = self.defaultRotation.y + 30
-  -- elseif dy < -triggerValue then
-    -- if self.forwardLooking then
-      -- self.camRot_V_deg.x = -180
-    -- else
-      -- self.camRot_V_deg.x = 0
-    -- end
-  -- end
 
   self.camRot_V_deg.y = clamp(self.camRot_V_deg.y, -85, 85)
 
@@ -147,15 +108,8 @@ function C:update(data)
     self.lastCamRot.x = self.lastCamRot.x + math.pi * 2
   end
 
-  -- local ddist = 0.1 * data.dt * (MoveManager.zoomIn - MoveManager.zoomOut) * self.fov_V
   self.camDist = self.defaultDistance
-  -- if ddist > triggerValue then
-    -- self.camDist = self.defaultDistance * 2
-  -- elseif ddist < -triggerValue then
-    -- self.camDist = self.camMinDist
-  -- end
 
-  --
   local ref_v  = data.veh:getNodePosition(self.refNodes.ref)
   local left_v = data.veh:getNodePosition(self.refNodes.left)
   local back_v = data.veh:getNodePosition(self.refNodes.back)
@@ -166,7 +120,7 @@ function C:update(data)
 
   if car_leftward_v:squaredLength() == 0 or car_backward_v:squaredLength() == 0 then
     data.res.pos = data.pos
-    data.res.rot = quatFromDir(vecY, vecZ)
+    data.res.rot = quatFromDir(vec3(0,1,0), vec3(0,0,1))
     return false
   end
 
@@ -181,30 +135,14 @@ function C:update(data)
   else
     self.camBase_v:set(0,0,0)
   end
-  
-  
-  local targetPos_g
-  local targetPos_g_unshimmed
-  if self.mode == 'center' then
-    targetPos_g = data.veh:getBBCenter()
-  else
-    -- This is centred w.r.t the car. this is because `(car_leftward_v * self.camBase_v.x)` is centred w.r.t the car.
+
     --SHIM HERE!
     local camOffset2_V =
       car_leftward_v * self.camBase_v.x +
       car_backward_v * self.camBase_v.y +
-      car_upward_v * self.camBase_v.z
+        car_upward_v * self.camBase_v.z
 
-    local camOffset2_V_unshimmed =
-      car_leftward_v * self.camBase_v.x +
-      car_backward_v * self.camBase_v.y +
-      car_upward_v * self.camBase_v.z
-
-    -- This is centred w.r.t the car. this is because `camOffset2_V` is centred w.r.t the car.
-    targetPos_g = data.pos + ref_v + camOffset2_V
-    targetPos_g_unshimmed = data.pos + ref_v + camOffset2_V_unshimmed
-    -- debuggy(targetPos_g, "targetPos_g", ColorF(1, 0, 0, 1))
-  end
+  local targetPos_g = data.pos + ref_v + camOffset2_V
 
   local car_forward_v = -car_backward_v; car_forward_v:normalize()
 
@@ -273,21 +211,15 @@ function C:update(data)
   )
 
   local qdir_veh = quatFromDir(car_backward_v, car_upward_v)
-  -- This is where we apply the car's orientation to the camera position.
   local camPos_r = qdir_veh * camPos_V
 
-  -- T_g is the "basis" or "point of reference" for C_g, when we apply C_V to it
-  local camPos_g = camPos_r + targetPos_g_unshimmed
+  local camPos_g = camPos_r + targetPos_g
 
   local dir_cam2target = (targetPos_g - camPos_g); dir_cam2target:normalize()
   local qdir_cam2target = quatFromDir(dir_cam2target, car_upward_v)
 
-  -- we don't use toEulerYXZ because somehow it, and setFromEuler's formats, are not correspondent.
   local edir_cam2target = getEulerForSetFromEuler(qdir_cam2target)
   -- SHIM HERE!
-  -- the x,y,z rotations applied here seem to be "rotate around the corresponding x,y,z axes on grid,small,pure map."
-  -- angle: radians. this one's rotations is just the camera rotating on it's own point. it's not rotating around the targetPos_g.
-  -- TODO: modifying this is really weird and inconsistent with global direction. is it global or vehicle or camera scoped? find that out
   qdir_cam2target:setFromEuler(
     edir_cam2target.x,
     edir_cam2target.y,
@@ -304,6 +236,7 @@ function C:update(data)
   data.res.fov = self.fov_V -- +70
   data.res.targetPos = targetPos_g
 
+  data.res.collisionCompatible = true
   self.collision:update(data)
   return true
 end
