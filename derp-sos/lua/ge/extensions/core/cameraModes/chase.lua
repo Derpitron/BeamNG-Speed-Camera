@@ -64,15 +64,15 @@ function C:onSettingsChanged()
 end
 
 function C:reset()
-  self.camRot_V = vec3(self.defaultRotation)
-  self.camRot_V.x = 0
+  self.camRot_V_deg = vec3(self.defaultRotation)
+  self.camRot_V_deg.x = 0
   self.forwardLooking = true
   self.camResetted = 2
   self.relYaw = 0
   self.relPitch = 0
 end
 
-local rot_V = vec3()
+local rot_V_rad = vec3()
 function C:update(data)
   data.res.collisionCompatible = true
   -- update input
@@ -85,42 +85,42 @@ function C:update(data)
   if math.abs(relPitchUsed) < deadzone then relPitchUsed = 0 end
 
   local dx = 200*relYawUsed + 100*data.dt*(MoveManager.yawRight - MoveManager.yawLeft)
-  self.camRot_V.x = 0
+  self.camRot_V_deg.x = 0
   if not self.forwardLooking then
-    self.camRot_V.x = -180
+    self.camRot_V_deg.x = -180
   end
 
   local triggerValue = 0.05
 
   if dx > triggerValue then
-    self.camRot_V.x = 90
+    self.camRot_V_deg.x = 90
   elseif dx < -triggerValue then
-    self.camRot_V.x = -90
+    self.camRot_V_deg.x = -90
   end
   if not self.forwardLooking then
-    self.camRot_V.x = -self.camRot_V.x
+    self.camRot_V_deg.x = -self.camRot_V_deg.x
   end
 
   local dy = 200*relPitchUsed + 100*data.dt*(MoveManager.pitchUp - MoveManager.pitchDown)
-  self.camRot_V.y = self.defaultRotation.y
+  self.camRot_V_deg.y = self.defaultRotation.y
   if dy > triggerValue then
-    self.camRot_V.y = self.defaultRotation.y + 30
+    self.camRot_V_deg.y = self.defaultRotation.y + 30
   elseif dy < -triggerValue then
     if self.forwardLooking then
-      self.camRot_V.x = -180
+      self.camRot_V_deg.x = -180
     else
-      self.camRot_V.x = 0
+      self.camRot_V_deg.x = 0
     end
   end
 
-  self.camRot_V.y = clamp(self.camRot_V.y, -85, 85)
+  self.camRot_V_deg.y = clamp(self.camRot_V_deg.y, -85, 85)
 
   -- make sure the rotation is never bigger than 2 PI
-  if self.camRot_V.x > 180 then
-    self.camRot_V.x = self.camRot_V.x - 360
+  if self.camRot_V_deg.x > 180 then
+    self.camRot_V_deg.x = self.camRot_V_deg.x - 360
     self.lastCamRot.x = self.lastCamRot.x - math.pi * 2
-  elseif self.camRot_V.x < -180 then
-    self.camRot_V.x = self.camRot_V.x + 360
+  elseif self.camRot_V_deg.x < -180 then
+    self.camRot_V_deg.x = self.camRot_V_deg.x + 360
     self.lastCamRot.x = self.lastCamRot.x + math.pi * 2
   end
 
@@ -211,40 +211,40 @@ function C:update(data)
   local forwardVelo = self.fwdVeloSmoother:getUncapped(velF, data.dt)
   if self.camResetted == 0 then
     if self.forwardLooking and forwardVelo < -1.5 and math.abs(forwardVelo) > velNF then
-      if self.camRot_V.x >= 0 then
-        self.camRot_V:set(self.defaultRotation)
-        self.camRot_V.x = 180
+      if self.camRot_V_deg.x >= 0 then
+        self.camRot_V_deg:set(self.defaultRotation)
+        self.camRot_V_deg.x = 180
       else
-        self.camRot_V:set(self.defaultRotation)
-        self.camRot_V.x = -180
+        self.camRot_V_deg:set(self.defaultRotation)
+        self.camRot_V_deg.x = -180
       end
       self.forwardLooking = false
     elseif not self.forwardLooking and forwardVelo > 1.5 then
-      self.camRot_V:set(self.defaultRotation)
-      self.camRot_V.x = 0
+      self.camRot_V_deg:set(self.defaultRotation)
+      self.camRot_V_deg.x = 0
       self.forwardLooking = true
     end
   end
   self.lastDataPos:set(data.pos)
   
   -- this variable exists for smoothing camera rotation.
-  rot_V:set(
-    math.rad(self.camRot_V.x),
-    math.rad(self.camRot_V.y),
-    math.rad(self.camRot_V.z)
+  rot_V_rad:set(
+    math.rad(self.camRot_V_deg.x),
+    math.rad(self.camRot_V_deg.y),
+    math.rad(self.camRot_V_deg.z)
   )
 
   -- smoothing
   local ratio_V = 1 / (data.dt * 8)
-  rot_V.x = 1 / (ratio_V + 1) * rot_V.x + (ratio_V / (ratio_V + 1)) * self.lastCamRot.x
-  rot_V.y = 1 / (ratio_V + 1) * rot_V.y + (ratio_V / (ratio_V + 1)) * self.lastCamRot.y
+  rot_V_rad.x = 1 / (ratio_V + 1) * rot_V_rad.x + (ratio_V / (ratio_V + 1)) * self.lastCamRot.x
+  rot_V_rad.y = 1 / (ratio_V + 1) * rot_V_rad.y + (ratio_V / (ratio_V + 1)) * self.lastCamRot.y
 
   local dist_V = 1 / (ratio_V + 1) * self.camDist + (ratio_V / (ratio_V + 1)) * self.lastCamDist
 
   local camPos_V = dist_V * vec3(
-      math.sin(rot_V.x) * math.cos(rot_V.y)
-    , math.cos(rot_V.x) * math.cos(rot_V.y)
-    , math.sin(rot_V.y)
+      math.sin(rot_V_rad.x) * math.cos(rot_V_rad.y)
+    , math.cos(rot_V_rad.x) * math.cos(rot_V_rad.y)
+    , math.sin(rot_V_rad.y)
   )
 
   local qdir_veh = quatFromDir(-dir, up)
@@ -257,7 +257,7 @@ function C:update(data)
   local dir_cam2target = (targetPos_g - camPos_g); dir_cam2target:normalize()
   local qdir_cam2target = quatFromDir(dir_cam2target, up)
 
-  self.lastCamRot:set(rot_V)
+  self.lastCamRot:set(rot_V_rad)
   self.lastCamDist = dist_V
   self.camResetted = math.max(self.camResetted - 1, 0)
 
