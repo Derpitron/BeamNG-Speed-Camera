@@ -160,22 +160,22 @@ function C:update(data)
   end
   
   
-  local T_g
+  local targetPos_g
   if self.mode == 'center' then
-    T_g = data.veh:getBBCenter()
+    targetPos_g = data.veh:getBBCenter()
   else
     -- This is centred w.r.t the car. 
     -- 
     -- this is because `(nx_v * self.camBase_v.x)` is centred w.r.t the car.
     local camOffset2_V =
-    nx_v * self.camBase_v.x +
-    ny_v * self.camBase_v.y +
-    nz_v * self.camBase_v.z
+      nx_v * self.camBase_v.x +
+      ny_v * self.camBase_v.y +
+      nz_v * self.camBase_v.z
 
     -- This is centred w.r.t the car. 
     -- 
     -- this is because `camOffset2_V` is centred w.r.t the car.
-    T_g = data.pos + ref_v + camOffset2_V
+    targetPos_g = data.pos + ref_v + camOffset2_V
   end
 
   local dir = (ref_v - back_v); dir:normalize()
@@ -241,7 +241,7 @@ function C:update(data)
 
   local dist_V = 1 / (ratio_V + 1) * self.camDist + (ratio_V / (ratio_V + 1)) * self.lastCamDist
 
-  local C_V = dist_V * vec3(
+  local camPos_V = dist_V * vec3(
       math.sin(rot_V.x) * math.cos(rot_V.y)
     , math.cos(rot_V.x) * math.cos(rot_V.y)
     , math.sin(rot_V.y)
@@ -249,12 +249,12 @@ function C:update(data)
 
   local qdir_veh = quatFromDir(-dir, up)
   -- This is where we apply the car's orientation to the camera position.
-  local C_r = qdir_veh * C_V
+  local camPos_r = qdir_veh * camPos_V
 
   -- T_g is the "basis" or "point of reference" for C_g, when we apply C_V to it
-  local C_g = C_r + T_g
+  local camPos_g = camPos_r + targetPos_g
 
-  local dir_cam2target = (T_g - C_g); dir_cam2target:normalize()
+  local dir_cam2target = (targetPos_g - camPos_g); dir_cam2target:normalize()
   local qdir_cam2target = quatFromDir(dir_cam2target, up)
 
   self.lastCamRot:set(rot_V)
@@ -262,10 +262,10 @@ function C:update(data)
   self.camResetted = math.max(self.camResetted - 1, 0)
 
   -- application
-  data.res.pos = C_g
+  data.res.pos = camPos_g
   data.res.rot = qdir_cam2target
   data.res.fov = self.fov_V -- +70
-  data.res.targetPos = T_g
+  data.res.targetPos = targetPos_g
 
   self.collision:update(data)
   return true
