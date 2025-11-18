@@ -45,14 +45,14 @@ function C:onVehicleCameraConfigChanged()
     self.defaultRotation = vec3(self.defaultRotation)
     self.defaultRotation.y = -self.defaultRotation.y
   end
-  self.camRot_v = vec3(self.defaultRotation)
+  self.camRot_V = vec3(self.defaultRotation)
   self.camMinDist = self.distanceMin or 3
   self.distance = self.distance or 5
   self.defaultDistance = self.distance
   self.camDist = self.defaultDistance
   self.lastCamDist = self.defaultDistance
   self.mode = self.mode or 'ref'
-  self.fov = self.fov or 65
+  self.fov_V = self.fov_V or 65
   self.offset = vec3(self.offset)
   self.camBase_v = vec3()
 end
@@ -64,15 +64,15 @@ function C:onSettingsChanged()
 end
 
 function C:reset()
-  self.camRot_v = vec3(self.defaultRotation)
-  self.camRot_v.x = 0
+  self.camRot_V = vec3(self.defaultRotation)
+  self.camRot_V.x = 0
   self.forwardLooking = true
   self.camResetted = 2
   self.relYaw = 0
   self.relPitch = 0
 end
 
-local rot = vec3()
+local rot_V = vec3()
 function C:update(data)
   data.res.collisionCompatible = true
   -- update input
@@ -85,46 +85,46 @@ function C:update(data)
   if math.abs(relPitchUsed) < deadzone then relPitchUsed = 0 end
 
   local dx = 200*relYawUsed + 100*data.dt*(MoveManager.yawRight - MoveManager.yawLeft)
-  self.camRot_v.x = 0
+  self.camRot_V.x = 0
   if not self.forwardLooking then
-    self.camRot_v.x = -180
+    self.camRot_V.x = -180
   end
 
   local triggerValue = 0.05
 
   if dx > triggerValue then
-    self.camRot_v.x = 90
+    self.camRot_V.x = 90
   elseif dx < -triggerValue then
-    self.camRot_v.x = -90
+    self.camRot_V.x = -90
   end
   if not self.forwardLooking then
-    self.camRot_v.x = -self.camRot_v.x
+    self.camRot_V.x = -self.camRot_V.x
   end
 
   local dy = 200*relPitchUsed + 100*data.dt*(MoveManager.pitchUp - MoveManager.pitchDown)
-  self.camRot_v.y = self.defaultRotation.y
+  self.camRot_V.y = self.defaultRotation.y
   if dy > triggerValue then
-    self.camRot_v.y = self.defaultRotation.y + 30
+    self.camRot_V.y = self.defaultRotation.y + 30
   elseif dy < -triggerValue then
     if self.forwardLooking then
-      self.camRot_v.x = -180
+      self.camRot_V.x = -180
     else
-      self.camRot_v.x = 0
+      self.camRot_V.x = 0
     end
   end
 
-  self.camRot_v.y = clamp(self.camRot_v.y, -85, 85)
+  self.camRot_V.y = clamp(self.camRot_V.y, -85, 85)
 
   -- make sure the rotation is never bigger than 2 PI
-  if self.camRot_v.x > 180 then
-    self.camRot_v.x = self.camRot_v.x - 360
+  if self.camRot_V.x > 180 then
+    self.camRot_V.x = self.camRot_V.x - 360
     self.lastCamRot.x = self.lastCamRot.x - math.pi * 2
-  elseif self.camRot_v.x < -180 then
-    self.camRot_v.x = self.camRot_v.x + 360
+  elseif self.camRot_V.x < -180 then
+    self.camRot_V.x = self.camRot_V.x + 360
     self.lastCamRot.x = self.lastCamRot.x + math.pi * 2
   end
 
-  local ddist = 0.1 * data.dt * (MoveManager.zoomIn - MoveManager.zoomOut) * self.fov
+  local ddist = 0.1 * data.dt * (MoveManager.zoomIn - MoveManager.zoomOut) * self.fov_V
   self.camDist = self.defaultDistance
   if ddist > triggerValue then
     self.camDist = self.defaultDistance * 2
@@ -151,25 +151,31 @@ function C:update(data)
 
   if self.offset and self.offset.x then
     self.camBase_v:set(
-      self.offset.x / (nx_v:length() + 1e-30),
+      (self.offset.x / (nx_v:length() + 1e-30)),
       self.offset.y / (ny_v:length() + 1e-30),
       self.offset.z / (nz_v:length() + 1e-30)
     )
   else
     self.camBase_v:set(0,0,0)
   end
-
-
+  
+  
   local T_g
   if self.mode == 'center' then
     T_g = data.veh:getBBCenter()
   else
-    local camOffset2_v =
-      nx_v * self.camBase_v.x +
-      ny_v * self.camBase_v.y +
-      nz_v * self.camBase_v.z
+    -- This is centred w.r.t the car. 
+    -- 
+    -- this is because `(nx_v * self.camBase_v.x)` is centred w.r.t the car.
+    local camOffset2_V =
+    nx_v * self.camBase_v.x +
+    ny_v * self.camBase_v.y +
+    nz_v * self.camBase_v.z
 
-    T_g = data.pos + ref_v + camOffset2_v
+    -- This is centred w.r.t the car. 
+    -- 
+    -- this is because `camOffset2_V` is centred w.r.t the car.
+    T_g = data.pos + ref_v + camOffset2_V
   end
 
   local dir = (ref_v - back_v); dir:normalize()
@@ -205,57 +211,60 @@ function C:update(data)
   local forwardVelo = self.fwdVeloSmoother:getUncapped(velF, data.dt)
   if self.camResetted == 0 then
     if self.forwardLooking and forwardVelo < -1.5 and math.abs(forwardVelo) > velNF then
-      if self.camRot_v.x >= 0 then
-        self.camRot_v:set(self.defaultRotation)
-        self.camRot_v.x = 180
+      if self.camRot_V.x >= 0 then
+        self.camRot_V:set(self.defaultRotation)
+        self.camRot_V.x = 180
       else
-        self.camRot_v:set(self.defaultRotation)
-        self.camRot_v.x = -180
+        self.camRot_V:set(self.defaultRotation)
+        self.camRot_V.x = -180
       end
       self.forwardLooking = false
     elseif not self.forwardLooking and forwardVelo > 1.5 then
-      self.camRot_v:set(self.defaultRotation)
-      self.camRot_v.x = 0
+      self.camRot_V:set(self.defaultRotation)
+      self.camRot_V.x = 0
       self.forwardLooking = true
     end
   end
   self.lastDataPos:set(data.pos)
-
-  rot:set(
-    math.rad(self.camRot_v.x),
-    math.rad(self.camRot_v.y),
-    math.rad(self.camRot_v.z)
+  
+  -- this variable exists for smoothing camera rotation.
+  rot_V:set(
+    math.rad(self.camRot_V.x),
+    math.rad(self.camRot_V.y),
+    math.rad(self.camRot_V.z)
   )
 
   -- smoothing
-  local ratio = 1 / (data.dt * 8)
-  rot.x = 1 / (ratio + 1) * rot.x + (ratio / (ratio + 1)) * self.lastCamRot.x
-  rot.y = 1 / (ratio + 1) * rot.y + (ratio / (ratio + 1)) * self.lastCamRot.y
+  local ratio_V = 1 / (data.dt * 8)
+  rot_V.x = 1 / (ratio_V + 1) * rot_V.x + (ratio_V / (ratio_V + 1)) * self.lastCamRot.x
+  rot_V.y = 1 / (ratio_V + 1) * rot_V.y + (ratio_V / (ratio_V + 1)) * self.lastCamRot.y
 
-  local dist = 1 / (ratio + 1) * self.camDist + (ratio / (ratio + 1)) * self.lastCamDist
+  local dist_V = 1 / (ratio_V + 1) * self.camDist + (ratio_V / (ratio_V + 1)) * self.lastCamDist
 
-  local C_v = dist * vec3(
-      math.sin(rot.x) * math.cos(rot.y)
-    , math.cos(rot.x) * math.cos(rot.y)
-    , math.sin(rot.y)
+  local C_V = dist_V * vec3(
+      math.sin(rot_V.x) * math.cos(rot_V.y)
+    , math.cos(rot_V.x) * math.cos(rot_V.y)
+    , math.sin(rot_V.y)
   )
 
   local qdir_veh = quatFromDir(-dir, up)
-  C_v = qdir_veh * C_v
+  -- This is where we apply the car's orientation to the camera position.
+  local C_r = qdir_veh * C_V
 
-  local C_g = C_v + T_g
+  -- T_g is the "basis" or "point of reference" for C_g, when we apply C_V to it
+  local C_g = C_r + T_g
 
   local dir_cam2target = (T_g - C_g); dir_cam2target:normalize()
   local qdir_cam2target = quatFromDir(dir_cam2target, up)
 
-  self.lastCamRot:set(rot)
-  self.lastCamDist = dist
+  self.lastCamRot:set(rot_V)
+  self.lastCamDist = dist_V
   self.camResetted = math.max(self.camResetted - 1, 0)
 
   -- application
   data.res.pos = C_g
   data.res.rot = qdir_cam2target
-  data.res.fov = self.fov -- +70
+  data.res.fov = self.fov_V -- +70
   data.res.targetPos = T_g
 
   self.collision:update(data)
