@@ -137,7 +137,7 @@ function C:update(data)
     self.camBase_v:set(0,0,0)
   end
 
-    --SHIM HERE!
+    --SHIM HERE affects targetPos_g and camPos_V!
     local camOffset2_V =
       nx_v * self.camBase_v.x +
       ny_v * self.camBase_v.y +
@@ -204,7 +204,7 @@ function C:update(data)
 
   local dist_V = 1 / (ratio_V + 1) * self.camDist + (ratio_V / (ratio_V + 1)) * self.lastCamDist
 
-  --SHIM HERE!
+  --SHIM HERE! affects camPos_V
   local camPos_V = dist_V * vec3(
       math.sin(rot_V_rad.x) * math.cos(rot_V_rad.y)
     , math.cos(rot_V_rad.x) * math.cos(rot_V_rad.y)
@@ -221,6 +221,7 @@ function C:update(data)
 
   local edir_cam2target = getEulerForSetFromEuler(qdir_cam2target)
   -- SHIM HERE!
+  -- affects camera rotation in look, not space
   qdir_cam2target:setFromEuler(
     edir_cam2target.x,
     edir_cam2target.y,
