@@ -2,8 +2,7 @@
 -- If a copy of the bCDDL was not distributed with this
 -- file, You can obtain one at http://beamng.com/bCDDL-1.1.txt
 
-local vecY = vec3(0,1,0)
-local vecZ = vec3(0,0,1)
+local collision = require('core/cameraModes/collision')
 
 local function debuggy(point, text, color)
   debugDrawer:drawSphere(point, 0.05, color, false)
@@ -33,8 +32,6 @@ local function getEulerForSetFromEuler(q)
   return vec3(gamma, alpha, beta)
 end
 
-
-local collision = require('core/cameraModes/collision')
 
 local C = {}
 C.__index = C
@@ -166,7 +163,7 @@ function C:update(data)
 
   if car_leftward_v:squaredLength() == 0 or car_backward_v:squaredLength() == 0 then
     data.res.pos = data.pos
-    data.res.rot = quatFromDir(vecY, vecZ)
+    data.res.rot = quatFromDir(vec3(0,1,0), vec3(0,0,1))
     return false
   end
 
@@ -216,7 +213,7 @@ function C:update(data)
       car_upward_v = (1 / (upSmoothratio + 1) * car_upward_v + (upSmoothratio / (upSmoothratio + 1)) * self.lastCamUp); car_upward_v:normalize()
     else
       -- if rolling is disabled, we are always up no matter what ...
-      car_upward_v:set(vecZ)
+      car_upward_v:set(vec3(0,0,1))
     end
     car_forward_v:set(
       self.dirSmoothX:getUncapped(car_forward_v.x, data.dt*1000),
