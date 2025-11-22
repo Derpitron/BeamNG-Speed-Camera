@@ -201,7 +201,7 @@ function C:update(data)
       -- if rolling is disabled, we are always up no matter what ...
       cam_upVector:set(vec3(0,0,1))
     end
-    veh_forwardVector:set(
+    veh_forwardVector = vec3(
       self.dirSmoothX:getUncapped(veh_forwardVector.x, data.dt*1000),
       self.dirSmoothY:getUncapped(veh_forwardVector.y, data.dt*1000),
       self.dirSmoothZ:getUncapped(veh_forwardVector.z, data.dt*1000)
