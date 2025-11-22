@@ -44,15 +44,16 @@ function C:init()
   self.dirSmoothX = newTemporalSmoothing(chaseDirSmoothCoef)
   self.dirSmoothY = newTemporalSmoothing(chaseDirSmoothCoef)
   self.dirSmoothZ = newTemporalSmoothing(chaseDirSmoothCoef)
-  self.lastDataPos = vec3()
-  self.forwardLooking = true
-  self.lastRefPos = vec3()
-  self.last_cam_upVector = vec3()
+
+  --prev pos, vel provided by camData
+  self.prev_veh_accel = vec3(0,0,0)
+  self.prev_veh_jerk = vec3(0,0,0)
+
+
+  self.last_cam_upVector = vec3(0,0,1)
   self.camResetted = 0
 
   self.sumDt = 0
-
-  self.enablePanInput = 0
 
   self.collision = collision()
   self.collision:init()
@@ -69,14 +70,14 @@ function C:onVehicleCameraConfigChanged()
     self.defaultRotation = vec3(self.defaultRotation)
     self.defaultRotation.y = -self.defaultRotation.y
   end
-  self.camRot_V_deg = vec3(self.defaultRotation)
+  self.rot = vec3(self.defaultRotation)
   self.camMinDist = self.distanceMin or 3
   self.distance = self.distance or 5
   self.defaultDistance = self.distance
-  self.camDist = self.defaultDistance
+  self.dist = self.defaultDistance
   self.lastCamDist = self.defaultDistance
   self.mode = self.mode or 'ref'
-  self.fov_V = self.fov_V or 65
+  self.fov = self.fov or 65
   self.offset = vec3(self.offset)
   self.camBase = vec3()
 end
@@ -88,205 +89,113 @@ function C:onSettingsChanged()
 end
 
 function C:reset()
-  self.camRot_V_deg = vec3(self.defaultRotation)
-  self.camRot_V_deg.x = 0
-  self.forwardLooking = true
+  --prev pos, vel provided by camData
+  self.prev_veh_accel = vec3(0,0,0)
+  self.prev_veh_jerk = vec3(0,0,0)
+
+  self.rot = vec3(self.defaultRotation)
+  self.rot.x = 0
   self.camResetted = 2
   self.relYaw = 0
   self.relPitch = 0
 end
 
-local rot_V_rad = vec3()
 function C:update(data)
   data.res.collisionCompatible = true
   self.sumDt = self.sumDt + data.dtSim
 
-  -- mouse/controller pan input
-  self.camRot_V_deg.x = 0
-  self.camRot_V_deg.y = self.defaultRotation.y
-  self.camDist = self.defaultDistance
-
-  if self.enablePanInput == 1 then
-    local deadzone = 0.5
-    self.relYaw =   clamp(self.relYaw   + 0.15*MoveManager.yawRelative  , -1, 1)
-    self.relPitch = clamp(self.relPitch + 0.15*MoveManager.pitchRelative, -1, 1)
-    local relYawUsed   = self.relYaw
-    local relPitchUsed = self.relPitch
-    if math.abs(relYawUsed)   < deadzone then relYawUsed   = 0 end
-    if math.abs(relPitchUsed) < deadzone then relPitchUsed = 0 end
-
-    local dx = 200*relYawUsed + 100*data.dt*(MoveManager.yawRight - MoveManager.yawLeft)
-    if not self.forwardLooking then
-      self.camRot_V_deg.x = -180
-    end
-
-    local triggerValue = 0.05
-
-    if dx > triggerValue then
-      self.camRot_V_deg.x = 90
-    elseif dx < -triggerValue then
-      self.camRot_V_deg.x = -90
-    end
-    if not self.forwardLooking then
-      self.camRot_V_deg.x = -self.camRot_V_deg.x
-    end
-
-    local dy = 200*relPitchUsed + 100*data.dt*(MoveManager.pitchUp - MoveManager.pitchDown)
-
-    if dy > triggerValue then
-      self.camRot_V_deg.y = self.defaultRotation.y + 30
-    elseif dy < -triggerValue then
-      if self.forwardLooking then
-        self.camRot_V_deg.x = -180
-      else
-        self.camRot_V_deg.x = 0
-      end
-    end
-
-    local ddist = 0.1 * data.dt * (MoveManager.zoomIn - MoveManager.zoomOut) * self.fov_V
-    if ddist > triggerValue then
-      self.camDist = self.defaultDistance * 2
-    elseif ddist < -triggerValue then
-      self.camDist = self.camMinDist
-    end
-  end
-
-  self.camRot_V_deg.y = clamp(self.camRot_V_deg.y, -85, 85)
-
-  -- make sure the rotation is never bigger than 2 PI
-  if self.camRot_V_deg.x > 180 then
-    self.camRot_V_deg.x = self.camRot_V_deg.x - 360
-    self.lastCamRot.x = self.lastCamRot.x - math.pi * 2
-  elseif self.camRot_V_deg.x < -180 then
-    self.camRot_V_deg.x = self.camRot_V_deg.x + 360
-    self.lastCamRot.x = self.lastCamRot.x + math.pi * 2
-  end
+  -- 
+  -- VEHICLE DATA
+  --
 
   local refNode  = data.veh:getNodePosition(self.refNodes.ref)
   local leftNode = data.veh:getNodePosition(self.refNodes.left)
   local backNode = data.veh:getNodePosition(self.refNodes.back)
 
-  -- calculate the camera offset: rotate with the vehicle
-  -- Palette: unit direction vectors.
   local veh_leftVector = (leftNode - refNode):normalized()
   local veh_backVector = (backNode - refNode):normalized()
   local veh_upVector = veh_leftVector:cross(veh_backVector):normalized()
 
   local veh_forwardVector = -veh_backVector:normalized()
 
+  -- Do dot product of each one here into whatever unit vector above u want, so as to get the e.g forward, backward velocity.
+  local veh_posit = vec3(data.pos) -- or getBBCenter, refNode?
+  local veh_veloc = vec3(data.vel)
+  local veh_accel = vec3((data.vel - data.prevVel) / data.dtSim)
+  local veh_jerk = vec3((veh_accel - self.prev_veh_accel) / data.dtSim)
 
-  local cam_upVector = vec3(veh_upVector)
 
-  if veh_leftVector:squaredLength() == 0 or veh_backVector:squaredLength() == 0 then
-    data.res.pos = data.pos
-    data.res.rot = quatFromDir(vec3(0,1,0), vec3(0,0,1))
-    return false
-  end
+  --
+  -- CAMERA DATA
+  -- All this data is respective to the camera itself.
+  --
 
-  if self.offset and self.offset.x then
-    -- Palette: 
-    -- self.camBase is the camera's default centre. this gives you a working centre of the vehicle.
-    -- (we assume) it is guaranteed to be correct, vanilla, and centred because vehicle jbeam -> `self.offset`, vehicle global rotation -> it's dir vectors 
-    self.camBase:set(
-      self.offset.x * veh_leftVector +
-      self.offset.y * veh_backVector +
-      self.offset.z * veh_upVector
-    )
-  else
-    self.camBase:set(0,0,0)
-  end
+  local cam_leftVector = vec3(1,0,0)
+  local cam_backVector = vec3(0,1,0)
+  local cam_upVector = vec3(0,0,1)
 
-  local targetPos_g
-  if self.mode == 'center' then
-    targetPos_g = data.veh:getBBCenter()
-  else
-    targetPos_g = data.pos + self.camBase
-  end
+  local cam_offset = vec3(self.offset)
 
-  if self.camResetted ~= 1 then
-    if self.rollSmoothing > 0.0001 then
-      local upSmoothratio = 1 / (data.dt * self.rollSmoothing)
-      cam_upVector = (1 / (upSmoothratio + 1) * cam_upVector + (upSmoothratio / (upSmoothratio + 1)) * self.last_cam_upVector):normalized()
-    else
-      -- if rolling is disabled, we are always up no matter what ...
-      cam_upVector:set(vec3(0,0,1))
-    end
-    veh_forwardVector = vec3(
-      self.dirSmoothX:getUncapped(veh_forwardVector.x, data.dt*1000),
-      self.dirSmoothY:getUncapped(veh_forwardVector.y, data.dt*1000),
-      self.dirSmoothZ:getUncapped(veh_forwardVector.z, data.dt*1000)
-    ):normalized()
-  end
-  self.last_cam_upVector:set(cam_upVector)
-
-  -- decide on a looking direction
-  -- the reason for this: on reload, the vehicle jumps and the velocity is not correct anymore
-  local vel = (data.pos - self.lastDataPos) / data.dt
-  local velF = vel:dot(veh_forwardVector)
-  local velNF = vel:distance(velF * veh_forwardVector)
-  local forwardVelo = self.fwdVeloSmoother:getUncapped(velF, data.dt)
-  if self.camResetted == 0 then
-    if self.forwardLooking and forwardVelo < -1.5 and math.abs(forwardVelo) > velNF then
-      if self.camRot_V_deg.x >= 0 then
-        self.camRot_V_deg:set(self.defaultRotation)
-        self.camRot_V_deg.x = 180
-      else
-        self.camRot_V_deg:set(self.defaultRotation)
-        self.camRot_V_deg.x = -180
-      end
-      self.forwardLooking = false
-    elseif not self.forwardLooking and forwardVelo > 1.5 then
-      self.camRot_V_deg:set(self.defaultRotation)
-      self.camRot_V_deg.x = 0
-      self.forwardLooking = true
-    end
-  end
-  self.lastDataPos:set(data.pos)
-
-  rot_V_rad:set(
-    math.rad(self.camRot_V_deg.x),
-    math.rad(self.camRot_V_deg.y),
-    math.rad(self.camRot_V_deg.z)
+  self.camBase:set(
+    cam_offset.x * veh_leftVector +
+    cam_offset.y * veh_backVector +
+    cam_offset.z * veh_upVector
   )
 
-  -- smoothing
-  local ratio_V = 1 / (data.dt * 8)
-  rot_V_rad.x = 1 / (ratio_V + 1) * rot_V_rad.x + (ratio_V / (ratio_V + 1)) * self.lastCamRot.x
-  rot_V_rad.y = 1 / (ratio_V + 1) * rot_V_rad.y + (ratio_V / (ratio_V + 1)) * self.lastCamRot.y
 
-  local dist_V = 1 / (ratio_V + 1) * self.camDist + (ratio_V / (ratio_V + 1)) * self.lastCamDist
-
-
-  local camPos_V = dist_V * vec3(
-      math.sin(rot_V_rad.x) * math.cos(rot_V_rad.y)
-    , math.cos(rot_V_rad.x) * math.cos(rot_V_rad.y)
-    , math.sin(rot_V_rad.y)
+  -- Applies local panning to camPos. doesn't yet consider the veicle's rotation. local to the vehicle's coordinate frame only.
+  local camPos_R = self.dist * vec3(
+      math.sin(math.rad(self.rot.x)) * math.cos(math.rad(self.rot.y)) -- yaw (eventually about vehicle
+    , math.cos(math.rad(self.rot.x)) * math.cos(math.rad(self.rot.y)) -- pitch (eventually about vehicle
+    , math.sin(math.rad(self.rot.y))                                  -- roll (eventually about vehicle
   )
 
-  local qdir_veh = quatFromDir(veh_backVector, cam_upVector)
-  local camPos_g = targetPos_g + (qdir_veh * camPos_V)
+  local qdir_cam2vehicle = quatFromDir(veh_backVector, cam_upVector)
 
-  local dir_cam2target = (targetPos_g - camPos_g):normalized()
-  local qdir_cam2target = quatFromDir(dir_cam2target, cam_upVector)
+  local targetPos = self.camBase
 
-  local edir_cam2target = getEulerForSetFromEuler(qdir_cam2target)
-  qdir_cam2target:setFromEuler(
-    edir_cam2target.x,
-    edir_cam2target.y,
-    edir_cam2target.z
-  )
+  -- Put everything into global coordinate system
+  local targetPos_g = data.pos + targetPos  -- or getBBCenter, ref?
+  -- Applies vehicle's rotation to the camera.
+  local camPos_v = qdir_cam2vehicle * camPos_R
+  local camPos_g = targetPos_g + camPos_v
 
-  self.lastCamRot:set(rot_V_rad)
-  self.lastCamDist = dist_V
-  self.camResetted = math.max(self.camResetted - 1, 0)
+  local cam_forwardVector = -(qdir_cam2vehicle * camPos_R):normalized()
+  local qdir_cam2target = quatFromDir(veh_forwardVector, cam_upVector)
 
-  -- application
+
+  -- application. Do NOT change this except for variable names
   data.res.pos = camPos_g
   data.res.rot = qdir_cam2target
-  data.res.fov = self.fov_V
+  data.res.fov = self.fov
   data.res.targetPos = targetPos_g
 
+  -- Loop here
   self.collision:update(data)
+
+  self.prev_veh_accel:set(veh_accel)
+  self.prev_veh_jerk:set(veh_jerk)
+  self.lastCamRot:set(self.rot)
+  self.lastCamDist = self.dist
+  self.camResetted = math.max(self.camResetted - 1, 0)
+
+  local function locals()
+  local variables = {}
+  local idx = 1
+  while true do
+    local ln, lv = debug.getlocal(2, idx)
+    if ln ~= nil then
+      variables[ln] = lv
+    else
+      break
+    end
+    idx = 1 + idx
+  end
+  return variables
+end
+
+  dump(locals())
+
   return true
 end
 
