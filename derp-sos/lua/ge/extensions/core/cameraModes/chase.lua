@@ -181,7 +181,6 @@ function C:update(data)
   
   
   local targetPos_g
-  local targetPos_g_unshimmed
   if self.mode == 'center' then
     targetPos_g = data.veh:getBBCenter()
   else
@@ -192,15 +191,9 @@ function C:update(data)
       car_backward_v * self.camBase_v.y +
       car_upward_v * self.camBase_v.z
 
-    local camOffset2_V_unshimmed =
-      car_leftward_v * self.camBase_v.x +
-      car_backward_v * self.camBase_v.y +
-      car_upward_v * self.camBase_v.z
 
     -- This is centred w.r.t the car. this is because `camOffset2_V` is centred w.r.t the car.
     targetPos_g = data.pos + ref_v + camOffset2_V
-    targetPos_g_unshimmed = data.pos + ref_v + camOffset2_V_unshimmed
-    -- debuggy(targetPos_g, "targetPos_g", ColorF(1, 0, 0, 1))
   end
 
   local car_forward_v = -car_backward_v; car_forward_v:normalize()
@@ -274,7 +267,7 @@ function C:update(data)
   local camPos_r = qdir_veh * camPos_V
 
   -- T_g is the "basis" or "point of reference" for C_g, when we apply C_V to it
-  local camPos_g = camPos_r + targetPos_g_unshimmed
+  local camPos_g = camPos_r + targetPos_g
 
   local dir_cam2target = (targetPos_g - camPos_g); dir_cam2target:normalize()
   local qdir_cam2target = quatFromDir(dir_cam2target, car_upward_v)
