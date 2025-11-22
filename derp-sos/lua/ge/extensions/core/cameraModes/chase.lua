@@ -47,7 +47,7 @@ function C:init()
   self.lastDataPos = vec3()
   self.forwardLooking = true
   self.lastRefPos = vec3()
-  self.lastCamUp = vec3()
+  self.last_cam_upVector = vec3()
   self.camResetted = 0
 
   self.collision = collision()
@@ -74,7 +74,7 @@ function C:onVehicleCameraConfigChanged()
   self.mode = self.mode or 'ref'
   self.fov_V = self.fov_V or 65
   self.offset = vec3(self.offset)
-  self.camBase_v = vec3()
+  self.camBase = vec3()
 end
 
 function C:onSettingsChanged()
@@ -153,75 +153,70 @@ function C:update(data)
   -- end
 
   --
-  local ref_v  = data.veh:getNodePosition(self.refNodes.ref)
-  local left_v = data.veh:getNodePosition(self.refNodes.left)
-  local back_v = data.veh:getNodePosition(self.refNodes.back)
+  local refNode  = data.veh:getNodePosition(self.refNodes.ref)
+  local leftNode = data.veh:getNodePosition(self.refNodes.left)
+  local backNode = data.veh:getNodePosition(self.refNodes.back)
 
   -- calculate the camera offset: rotate with the vehicle
-  local car_leftward_v = left_v - ref_v
-  local car_backward_v = back_v - ref_v
+  --Palette: vehicle direction vectors. all unit vectors
+  local veh_leftVector = (leftNode - refNode):normalized()
+  local veh_backVector = (backNode - refNode):normalized()
+  local veh_upVector = veh_leftVector:cross(veh_backVector):normalized()
 
-  if car_leftward_v:squaredLength() == 0 or car_backward_v:squaredLength() == 0 then
+  local veh_forwardVector = -veh_backVector:normalized()
+
+
+  --camera direction vectors
+  local cam_upVector = vec3(veh_upVector)
+
+  if veh_leftVector:squaredLength() == 0 or veh_backVector:squaredLength() == 0 then
     data.res.pos = data.pos
     data.res.rot = quatFromDir(vec3(0,1,0), vec3(0,0,1))
     return false
   end
 
-  local car_upward_v = car_leftward_v:cross(car_backward_v):normalized()
-
   if self.offset and self.offset.x then
-    self.camBase_v:set(
-      self.offset.x / (car_leftward_v:length() + 1e-30),
-      self.offset.y / (car_backward_v:length() + 1e-30),
-      self.offset.z / (car_upward_v:length() + 1e-30)
+    -- This is centred w.r.t the car. this is because `(car_leftward_v * self.camBase_v.x)` is centred w.r.t the car.
+    --SHIM HERE!
+    self.camBase:set(
+      self.offset.x * veh_leftVector +
+      self.offset.y * veh_backVector +
+      self.offset.z * veh_upVector
     )
   else
-    self.camBase_v:set(0,0,0)
+    self.camBase:set(0,0,0)
   end
-  
-  
+
   local targetPos_g
   if self.mode == 'center' then
     targetPos_g = data.veh:getBBCenter()
   else
-    -- This is centred w.r.t the car. this is because `(car_leftward_v * self.camBase_v.x)` is centred w.r.t the car.
-    --SHIM HERE!
-    local camOffset2_V =
-      car_leftward_v * self.camBase_v.x +
-      car_backward_v * self.camBase_v.y +
-      car_upward_v * self.camBase_v.z
-
-
     -- This is centred w.r.t the car. this is because `camOffset2_V` is centred w.r.t the car.
-    targetPos_g = data.pos + ref_v + camOffset2_V
+    targetPos_g = data.pos + self.camBase
   end
-
-  local car_forward_v = -car_backward_v; car_forward_v:normalize()
-
-  local car_upward_v = car_forward_v:cross(left_v); car_upward_v:normalize()
 
   if self.camResetted ~= 1 then
     if self.rollSmoothing > 0.0001 then
       local upSmoothratio = 1 / (data.dt * self.rollSmoothing)
-      car_upward_v = (1 / (upSmoothratio + 1) * car_upward_v + (upSmoothratio / (upSmoothratio + 1)) * self.lastCamUp); car_upward_v:normalize()
+      cam_upVector = (1 / (upSmoothratio + 1) * cam_upVector + (upSmoothratio / (upSmoothratio + 1)) * self.last_cam_upVector); cam_upVector:normalize()
     else
       -- if rolling is disabled, we are always up no matter what ...
-      car_upward_v:set(vec3(0,0,1))
+      cam_upVector:set(vec3(0,0,1))
     end
-    car_forward_v:set(
-      self.dirSmoothX:getUncapped(car_forward_v.x, data.dt*1000),
-      self.dirSmoothY:getUncapped(car_forward_v.y, data.dt*1000),
-      self.dirSmoothZ:getUncapped(car_forward_v.z, data.dt*1000)
+    veh_forwardVector:set(
+      self.dirSmoothX:getUncapped(veh_forwardVector.x, data.dt*1000),
+      self.dirSmoothY:getUncapped(veh_forwardVector.y, data.dt*1000),
+      self.dirSmoothZ:getUncapped(veh_forwardVector.z, data.dt*1000)
     );
-    car_forward_v:normalize()
+    veh_forwardVector:normalize()
   end
-  self.lastCamUp:set(car_upward_v)
+  self.last_cam_upVector:set(cam_upVector)
 
   -- decide on a looking direction
   -- the reason for this: on reload, the vehicle jumps and the velocity is not correct anymore
   local vel = (data.pos - self.lastDataPos) / data.dt
-  local velF = vel:dot(car_forward_v)
-  local velNF = vel:distance(velF * car_forward_v)
+  local velF = vel:dot(veh_forwardVector)
+  local velNF = vel:distance(velF * veh_forwardVector)
   local forwardVelo = self.fwdVeloSmoother:getUncapped(velF, data.dt)
   if self.camResetted == 0 then
     if self.forwardLooking and forwardVelo < -1.5 and math.abs(forwardVelo) > velNF then
@@ -262,7 +257,7 @@ function C:update(data)
     , math.sin(rot_V_rad.y)
   )
 
-  local qdir_veh = quatFromDir(car_backward_v, car_upward_v)
+  local qdir_veh = quatFromDir(veh_backVector, cam_upVector)
   -- This is where we apply the car's orientation to the camera position.
   local camPos_r = qdir_veh * camPos_V
 
@@ -270,7 +265,7 @@ function C:update(data)
   local camPos_g = camPos_r + targetPos_g
 
   local dir_cam2target = (targetPos_g - camPos_g); dir_cam2target:normalize()
-  local qdir_cam2target = quatFromDir(dir_cam2target, car_upward_v)
+  local qdir_cam2target = quatFromDir(dir_cam2target, cam_upVector)
 
   -- we don't use toEulerYXZ because somehow it, and setFromEuler's formats, are not correspondent.
   local edir_cam2target = getEulerForSetFromEuler(qdir_cam2target)

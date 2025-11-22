@@ -1,4 +1,0 @@
-targetPos
-camPos
-FOV
-camRot
