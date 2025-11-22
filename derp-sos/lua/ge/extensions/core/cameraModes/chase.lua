@@ -50,6 +50,10 @@ function C:init()
   self.last_cam_upVector = vec3()
   self.camResetted = 0
 
+  self.sumDt = 0
+
+  self.enablePanInput = 0
+
   self.collision = collision()
   self.collision:init()
 
@@ -95,41 +99,55 @@ end
 local rot_V_rad = vec3()
 function C:update(data)
   data.res.collisionCompatible = true
+  self.sumDt = self.sumDt + data.dtSim
+
   -- mouse/controller pan input
-  local deadzone = 0.5
-  self.relYaw =   clamp(self.relYaw   + 0.15*MoveManager.yawRelative  , -1, 1)
-  self.relPitch = clamp(self.relPitch + 0.15*MoveManager.pitchRelative, -1, 1)
-  local relYawUsed   = self.relYaw
-  local relPitchUsed = self.relPitch
-  if math.abs(relYawUsed)   < deadzone then relYawUsed   = 0 end
-  if math.abs(relPitchUsed) < deadzone then relPitchUsed = 0 end
-
-  local dx = 200*relYawUsed + 100*data.dt*(MoveManager.yawRight - MoveManager.yawLeft)
   self.camRot_V_deg.x = 0
-  if not self.forwardLooking then
-    self.camRot_V_deg.x = -180
-  end
-
-  local triggerValue = 0.05
-
-  if dx > triggerValue then
-    self.camRot_V_deg.x = 90
-  elseif dx < -triggerValue then
-    self.camRot_V_deg.x = -90
-  end
-  if not self.forwardLooking then
-    self.camRot_V_deg.x = -self.camRot_V_deg.x
-  end
-
-  local dy = 200*relPitchUsed + 100*data.dt*(MoveManager.pitchUp - MoveManager.pitchDown)
   self.camRot_V_deg.y = self.defaultRotation.y
-  if dy > triggerValue then
-    self.camRot_V_deg.y = self.defaultRotation.y + 30
-  elseif dy < -triggerValue then
-    if self.forwardLooking then
+  self.camDist = self.defaultDistance
+
+  if self.enablePanInput == 1 then
+    local deadzone = 0.5
+    self.relYaw =   clamp(self.relYaw   + 0.15*MoveManager.yawRelative  , -1, 1)
+    self.relPitch = clamp(self.relPitch + 0.15*MoveManager.pitchRelative, -1, 1)
+    local relYawUsed   = self.relYaw
+    local relPitchUsed = self.relPitch
+    if math.abs(relYawUsed)   < deadzone then relYawUsed   = 0 end
+    if math.abs(relPitchUsed) < deadzone then relPitchUsed = 0 end
+
+    local dx = 200*relYawUsed + 100*data.dt*(MoveManager.yawRight - MoveManager.yawLeft)
+    if not self.forwardLooking then
       self.camRot_V_deg.x = -180
-    else
-      self.camRot_V_deg.x = 0
+    end
+
+    local triggerValue = 0.05
+
+    if dx > triggerValue then
+      self.camRot_V_deg.x = 90
+    elseif dx < -triggerValue then
+      self.camRot_V_deg.x = -90
+    end
+    if not self.forwardLooking then
+      self.camRot_V_deg.x = -self.camRot_V_deg.x
+    end
+
+    local dy = 200*relPitchUsed + 100*data.dt*(MoveManager.pitchUp - MoveManager.pitchDown)
+
+    if dy > triggerValue then
+      self.camRot_V_deg.y = self.defaultRotation.y + 30
+    elseif dy < -triggerValue then
+      if self.forwardLooking then
+        self.camRot_V_deg.x = -180
+      else
+        self.camRot_V_deg.x = 0
+      end
+    end
+
+    local ddist = 0.1 * data.dt * (MoveManager.zoomIn - MoveManager.zoomOut) * self.fov_V
+    if ddist > triggerValue then
+      self.camDist = self.defaultDistance * 2
+    elseif ddist < -triggerValue then
+      self.camDist = self.camMinDist
     end
   end
 
@@ -142,14 +160,6 @@ function C:update(data)
   elseif self.camRot_V_deg.x < -180 then
     self.camRot_V_deg.x = self.camRot_V_deg.x + 360
     self.lastCamRot.x = self.lastCamRot.x + math.pi * 2
-  end
-
-  local ddist = 0.1 * data.dt * (MoveManager.zoomIn - MoveManager.zoomOut) * self.fov_V
-  self.camDist = self.defaultDistance
-  if ddist > triggerValue then
-    self.camDist = self.defaultDistance * 2
-  elseif ddist < -triggerValue then
-    self.camDist = self.camMinDist
   end
 
   local refNode  = data.veh:getNodePosition(self.refNodes.ref)
