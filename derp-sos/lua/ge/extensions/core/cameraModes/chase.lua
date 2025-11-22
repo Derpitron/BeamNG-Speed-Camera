@@ -152,13 +152,12 @@ function C:update(data)
     -- self.camDist = self.camMinDist
   -- end
 
-  --
   local refNode  = data.veh:getNodePosition(self.refNodes.ref)
   local leftNode = data.veh:getNodePosition(self.refNodes.left)
   local backNode = data.veh:getNodePosition(self.refNodes.back)
 
   -- calculate the camera offset: rotate with the vehicle
-  --Palette: vehicle direction vectors. all unit vectors
+  -- Palette: unit direction vectors.
   local veh_leftVector = (leftNode - refNode):normalized()
   local veh_backVector = (backNode - refNode):normalized()
   local veh_upVector = veh_leftVector:cross(veh_backVector):normalized()
@@ -166,7 +165,6 @@ function C:update(data)
   local veh_forwardVector = -veh_backVector:normalized()
 
 
-  --camera direction vectors
   local cam_upVector = vec3(veh_upVector)
 
   if veh_leftVector:squaredLength() == 0 or veh_backVector:squaredLength() == 0 then
@@ -176,8 +174,9 @@ function C:update(data)
   end
 
   if self.offset and self.offset.x then
-    -- This is centred w.r.t the car. this is because `(car_leftward_v * self.camBase_v.x)` is centred w.r.t the car.
-    --SHIM HERE!
+    -- Palette: 
+    -- self.camBase is the camera's default centre. this gives you a working centre of the vehicle.
+    -- (we assume) it is guaranteed to be correct, vanilla, and centred because vehicle jbeam -> `self.offset`, vehicle global rotation -> it's dir vectors 
     self.camBase:set(
       self.offset.x * veh_leftVector +
       self.offset.y * veh_backVector +
@@ -191,14 +190,13 @@ function C:update(data)
   if self.mode == 'center' then
     targetPos_g = data.veh:getBBCenter()
   else
-    -- This is centred w.r.t the car. this is because `camOffset2_V` is centred w.r.t the car.
     targetPos_g = data.pos + self.camBase
   end
 
   if self.camResetted ~= 1 then
     if self.rollSmoothing > 0.0001 then
       local upSmoothratio = 1 / (data.dt * self.rollSmoothing)
-      cam_upVector = (1 / (upSmoothratio + 1) * cam_upVector + (upSmoothratio / (upSmoothratio + 1)) * self.last_cam_upVector); cam_upVector:normalize()
+      cam_upVector = (1 / (upSmoothratio + 1) * cam_upVector + (upSmoothratio / (upSmoothratio + 1)) * self.last_cam_upVector):normalized()
     else
       -- if rolling is disabled, we are always up no matter what ...
       cam_upVector:set(vec3(0,0,1))
@@ -207,8 +205,7 @@ function C:update(data)
       self.dirSmoothX:getUncapped(veh_forwardVector.x, data.dt*1000),
       self.dirSmoothY:getUncapped(veh_forwardVector.y, data.dt*1000),
       self.dirSmoothZ:getUncapped(veh_forwardVector.z, data.dt*1000)
-    );
-    veh_forwardVector:normalize()
+    ):normalized()
   end
   self.last_cam_upVector:set(cam_upVector)
 
@@ -235,8 +232,7 @@ function C:update(data)
     end
   end
   self.lastDataPos:set(data.pos)
-  
-  -- this variable exists for smoothing camera rotation.
+
   rot_V_rad:set(
     math.rad(self.camRot_V_deg.x),
     math.rad(self.camRot_V_deg.y),
@@ -250,7 +246,7 @@ function C:update(data)
 
   local dist_V = 1 / (ratio_V + 1) * self.camDist + (ratio_V / (ratio_V + 1)) * self.lastCamDist
 
-  --SHIM HERE!
+
   local camPos_V = dist_V * vec3(
       math.sin(rot_V_rad.x) * math.cos(rot_V_rad.y)
     , math.cos(rot_V_rad.x) * math.cos(rot_V_rad.y)
@@ -258,21 +254,12 @@ function C:update(data)
   )
 
   local qdir_veh = quatFromDir(veh_backVector, cam_upVector)
-  -- This is where we apply the car's orientation to the camera position.
-  local camPos_r = qdir_veh * camPos_V
+  local camPos_g = targetPos_g + (qdir_veh * camPos_V)
 
-  -- T_g is the "basis" or "point of reference" for C_g, when we apply C_V to it
-  local camPos_g = camPos_r + targetPos_g
-
-  local dir_cam2target = (targetPos_g - camPos_g); dir_cam2target:normalize()
+  local dir_cam2target = (targetPos_g - camPos_g):normalized()
   local qdir_cam2target = quatFromDir(dir_cam2target, cam_upVector)
 
-  -- we don't use toEulerYXZ because somehow it, and setFromEuler's formats, are not correspondent.
   local edir_cam2target = getEulerForSetFromEuler(qdir_cam2target)
-  -- SHIM HERE!
-  -- the x,y,z rotations applied here seem to be "rotate around the corresponding x,y,z axes on grid,small,pure map."
-  -- angle: radians. this one's rotations is just the camera rotating on it's own point. it's not rotating around the targetPos_g.
-  -- TODO: modifying this is really weird and inconsistent with global direction. is it global or vehicle or camera scoped? find that out
   qdir_cam2target:setFromEuler(
     edir_cam2target.x,
     edir_cam2target.y,
@@ -286,7 +273,7 @@ function C:update(data)
   -- application
   data.res.pos = camPos_g
   data.res.rot = qdir_cam2target
-  data.res.fov = self.fov_V -- +70
+  data.res.fov = self.fov_V
   data.res.targetPos = targetPos_g
 
   self.collision:update(data)
