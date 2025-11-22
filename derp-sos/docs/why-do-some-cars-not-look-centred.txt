@@ -1,0 +1,13 @@
+# for mod developers/patchers:
+
+some third party vehicles have not set their offset, orbitOffset, chaseOffset, default, minDistance variables for their cameras properly.
+this is why chase.lua, orbit.lua, and my camera don't look centred on those vehicles. this is not a problem of my or beamng's camera code and
+adding individual fixes for each modded vehicle is out of scope for this mod.
+
+the fix: you can check your vehicle's centre x-position in blender, and add that as the offset in your vehicle jbeam. exactly how to do this i don't remember,
+it's been quite a while since i last edited vehicle jbeam. you should check vehicle's origin, refnode position, centre-visual position, etc
+
+# for my mod and other people's vehicle mod users:
+
+you should kindly ask mod authors to fix their vehicle's camera offsets in their jbeam, or, better yet, fix it for them and send them the patch so they can
+add it in. help others help you.
