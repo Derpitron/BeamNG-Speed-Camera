@@ -49,7 +49,6 @@ function C:init()
   self.prev_veh_accel = vec3(0,0,0)
   self.prev_veh_jerk = vec3(0,0,0)
 
-
   self.last_cam_upVector = vec3(0,0,1)
   self.camResetted = 0
 
@@ -81,6 +80,7 @@ function C:onVehicleCameraConfigChanged()
   self.offset = vec3(self.offset)
   self.camBase = vec3()
 end
+
 
 function C:onSettingsChanged()
   -- self.relaxation = settings.getValue('cameraOrbitRelaxation') or 3
@@ -145,17 +145,19 @@ function C:update(data)
 
   -- Applies local panning to camPos. doesn't yet consider the veicle's rotation. local to the vehicle's coordinate frame only.
   local camPos_R = self.dist * vec3(
-      math.sin(math.rad(self.rot.x)) * math.cos(math.rad(self.rot.y)) -- yaw (eventually about vehicle
+      - (math.sin(math.rad(self.rot.x)) * math.cos(math.rad(self.rot.y))) -- yaw (eventually about vehicle
     , math.cos(math.rad(self.rot.x)) * math.cos(math.rad(self.rot.y)) -- pitch (eventually about vehicle
     , math.sin(math.rad(self.rot.y))                                  -- roll (eventually about vehicle
   )
+
+  local rot_crash= vec3(0,0,0)
 
   local qdir_cam2vehicle = quatFromDir(veh_backVector, cam_upVector)
 
   local targetPos = self.camBase
 
   -- Put everything into global coordinate system
-  local targetPos_g = data.pos + targetPos  -- or getBBCenter, ref?
+  local targetPos_g = vec3(data.pos) + vec3(targetPos)  -- or getBBCenter, ref?
   -- Applies vehicle's rotation to the camera.
   local camPos_v = qdir_cam2vehicle * camPos_R
   local camPos_g = targetPos_g + camPos_v
@@ -175,6 +177,12 @@ function C:update(data)
 
   self.prev_veh_accel:set(veh_accel)
   self.prev_veh_jerk:set(veh_jerk)
+  dump(veh_accel)
+  --dump(vec3(
+  --  veh_jerk:dot(veh_leftVector),
+  --  veh_jerk:dot(veh_forwardVector),
+  --  veh_jerk:dot(veh_backVector)
+  --))
   self.lastCamRot:set(self.rot)
   self.lastCamDist = self.dist
   self.camResetted = math.max(self.camResetted - 1, 0)
@@ -194,7 +202,7 @@ function C:update(data)
   return variables
 end
 
-  dump(locals())
+  --dump(locals())
 
   return true
 end
