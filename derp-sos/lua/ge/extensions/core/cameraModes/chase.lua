@@ -2,9 +2,6 @@
 -- If a copy of the bCDDL was not distributed with this
 -- file, You can obtain one at http://beamng.com/bCDDL-1.1.txt
 
-local vecY = vec3(0,1,0)
-local vecZ = vec3(0,0,1)
-
 local function debuggy(point, text, color)
   debugDrawer:drawSphere(point, 0.05, color, false)
   debugDrawer:drawText(point, text, color, false)
@@ -12,7 +9,7 @@ local function debuggy(point, text, color)
 end
 
 -- transform the vec3 `v`, whose value currently is expressed in a coordinate frame SRC
--- into it's equivalent/component in the basis vec3 triad `basis`
+-- into it's equivalent/component in the basis vec3-table triad `basis`
 -- `frame_basis` triad represents the 3 vectors: right, forward, upward, that are expressed
 -- in coordinate frame SRC and themselves constitute the x,y,z axes of the local coordinate frame DST.
 local function transform(v__SRC, basis__SRC_DST)
@@ -23,6 +20,9 @@ local function transform(v__SRC, basis__SRC_DST)
     )
 end
 
+local vecY = vec3(0,1,0)
+local vecZ = vec3(0,0,1)
+
 local collision = require('core/cameraModes/collision')
 
 local C = {}
@@ -30,7 +30,7 @@ C.__index = C
 
 function C:init()
   self.disabledByDefault = true
-  self.lastCamRot = vec3()
+  self.camLastRot = vec3()
   self.fwdVeloSmoother = newTemporalSmoothing(100)
   local chaseDirSmoothCoef = 0.0008
   self.dirSmoothX = newTemporalSmoothing(chaseDirSmoothCoef)
@@ -39,7 +39,7 @@ function C:init()
   self.lastDataPos = vec3()
   self.forwardLooking = true
   self.lastRefPos = vec3()
-  self.lastCamUp = vec3()
+  self.camLastUp = vec3()
   self.camResetted = 0
 
   self.collision = collision()
@@ -62,7 +62,7 @@ function C:onVehicleCameraConfigChanged()
   self.distance = self.distance or 5
   self.defaultDistance = self.distance
   self.camDist = self.defaultDistance
-  self.lastCamDist = self.defaultDistance
+  self.camLastDist = self.defaultDistance
   self.mode = self.mode or 'ref'
   self.fov = self.fov or 65
   self.offset = vec3(self.offset)
@@ -130,10 +130,10 @@ function C:update(data)
   -- make sure the rotation is never bigger than 2 PI
   if self.camRot.x > 180 then
     self.camRot.x = self.camRot.x - 360
-    self.lastCamRot.x = self.lastCamRot.x - math.pi * 2
+    self.camLastRot.x = self.camLastRot.x - math.pi * 2
   elseif self.camRot.x < -180 then
     self.camRot.x = self.camRot.x + 360
-    self.lastCamRot.x = self.lastCamRot.x + math.pi * 2
+    self.camLastRot.x = self.camLastRot.x + math.pi * 2
   end
 
   local ddist = 0.1 * data.dt * (MoveManager.zoomIn - MoveManager.zoomOut) * self.fov
@@ -145,13 +145,13 @@ function C:update(data)
   end
 
   --
-  local ref_v  = data.veh:getNodePosition(self.refNodes.ref)
-  local left_v = data.veh:getNodePosition(self.refNodes.left)
-  local back_v = data.veh:getNodePosition(self.refNodes.back)
+  local ref  = data.veh:getNodePosition(self.refNodes.ref)
+  local left = data.veh:getNodePosition(self.refNodes.left)
+  local back = data.veh:getNodePosition(self.refNodes.back)
 
   -- calculate the camera offset: rotate with the vehicle
-  local nx = left_v - ref_v
-  local ny = back_v - ref_v
+  local nx = left - ref
+  local ny = back - ref
 
   if nx:squaredLength() == 0 or ny:squaredLength() == 0 then
     data.res.pos = data.pos
@@ -162,11 +162,7 @@ function C:update(data)
   local nz = nx:cross(ny):normalized()
 
   if self.offset and self.offset.x then
-    self.camBase:set(
-      self.offset.x / (nx:length() + 1e-30),
-      self.offset.y / (ny:length() + 1e-30),
-      self.offset.z / (nz:length() + 1e-30)
-    )
+    self.camBase:set(self.offset.x / (nx:length() + 1e-30), self.offset.y / (ny:length() + 1e-30), self.offset.z / (nz:length() + 1e-30))
   else
     self.camBase:set(0,0,0)
   end
@@ -176,38 +172,29 @@ function C:update(data)
   if self.mode == 'center' then
     targetPos = data.veh:getBBCenter()
   else
-    local camOffset2 =
-      nx * self.camBase.x +
-      ny * self.camBase.y +
-      nz * self.camBase.z
-
-    targetPos = data.pos + ref_v + camOffset2
+    local camOffset2 = nx * self.camBase.x + ny * self.camBase.y + nz * self.camBase.z
+    targetPos = data.pos + ref + camOffset2
   end
 
-  local dir = (ref_v - back_v); dir:normalize()
+  local dir = (ref - back); dir:normalize()
 
   if self.camResetted ~= 0 then
     self.lastDataPos = vec3(data.pos)
   end
 
-  local up = dir:cross(left_v); up:normalize()
+  local up = dir:cross(left); up:normalize()
 
   if self.camResetted ~= 1 then
     if self.rollSmoothing > 0.0001 then
       local upSmoothratio = 1 / (data.dt * self.rollSmoothing)
-      up = (1 / (upSmoothratio + 1) * up + (upSmoothratio / (upSmoothratio + 1)) * self.lastCamUp); up:normalize()
+      up = (1 / (upSmoothratio + 1) * up + (upSmoothratio / (upSmoothratio + 1)) * self.camLastUp); up:normalize()
     else
       -- if rolling is disabled, we are always up no matter what ...
       up:set(vecZ)
     end
-    dir:set(
-      self.dirSmoothX:getUncapped(dir.x, data.dt*1000),
-      self.dirSmoothY:getUncapped(dir.y, data.dt*1000),
-      self.dirSmoothZ:getUncapped(dir.z, data.dt*1000)
-    );
-    dir:normalize()
+    dir:set(self.dirSmoothX:getUncapped(dir.x, data.dt*1000), self.dirSmoothY:getUncapped(dir.y, data.dt*1000), self.dirSmoothZ:getUncapped(dir.z, data.dt*1000)); dir:normalize()
   end
-  self.lastCamUp:set(up)
+  self.camLastUp:set(up)
 
   -- decide on a looking direction
   -- the reason for this: on reload, the vehicle jumps and the velocity is not correct anymore
@@ -233,21 +220,17 @@ function C:update(data)
   end
   self.lastDataPos:set(data.pos)
 
-  rot:set(
-    math.rad(self.camRot.x),
-    math.rad(self.camRot.y),
-    math.rad(self.camRot.z)
-  )
+  rot:set(math.rad(self.camRot.x), math.rad(self.camRot.y), math.rad(self.camRot.z))
 
   -- smoothing
   local ratio = 1 / (data.dt * 8)
-  rot.x = 1 / (ratio + 1) * rot.x + (ratio / (ratio + 1)) * self.lastCamRot.x
-  rot.y = 1 / (ratio + 1) * rot.y + (ratio / (ratio + 1)) * self.lastCamRot.y
+  rot.x = 1 / (ratio + 1) * rot.x + (ratio / (ratio + 1)) * self.camLastRot.x
+  rot.y = 1 / (ratio + 1) * rot.y + (ratio / (ratio + 1)) * self.camLastRot.y
 
-  local dist = 1 / (ratio + 1) * self.camDist + (ratio / (ratio + 1)) * self.lastCamDist
+  local dist = 1 / (ratio + 1) * self.camDist + (ratio / (ratio + 1)) * self.camLastDist
 
   local calculatedCamPos = dist * vec3(
-      math.sin(rot.x) * math.cos(rot.y)
+     math.sin(rot.x) * math.cos(rot.y)
     , math.cos(rot.x) * math.cos(rot.y)
     , math.sin(rot.y)
   )
@@ -260,8 +243,8 @@ function C:update(data)
   local dir_target = (targetPos - camPos); dir_target:normalize()
   local qdir_target = quatFromDir(dir_target, up)
 
-  self.lastCamRot:set(rot)
-  self.lastCamDist = dist
+  self.camLastRot:set(rot)
+  self.camLastDist = dist
   self.camResetted = math.max(self.camResetted - 1, 0)
 
   --- start derpSOS
@@ -282,16 +265,16 @@ function C:update(data)
   ---& utility vectors/variables
   local updir__CAMERA_WORLD = updir__CAMERA_WORLD or up; updir__CAMERA_WORLD:normalize()
 
-  local camera_basis__WORLD = vec3(
-    right__CAMERA_WORLD,
-    dir_target,
-    updir__CAMERA_WORLD
-  )
-  local vehicle_basis__WORLD = vec3(
-    (-left):normalized(),
-    dir:normalized(),
-    up:normalized()
-  )
+  local camera_basis__WORLD = {
+    x=right__CAMERA_WORLD,
+    y=dir_target,
+    z=updir__CAMERA_WORLD
+  }
+  local vehicle_basis__WORLD = {
+    x=(-left):normalized(),
+    y=dir:normalized(),
+    z=up:normalized()
+  }
 
   local qdir__CAMERA_TARGET = quatFromDir(camera_basis__WORLD.y, camera_basis__WORLD.z)
   -- this is the quaternion that would rotate an object from being in the world's coordinate frame, to giving it's world value of that vector's equivalent within
