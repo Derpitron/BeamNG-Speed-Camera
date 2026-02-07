@@ -11,6 +11,18 @@ local function debuggy(point, text, color)
   print(text, dump(point))
 end
 
+-- transform the vec3 `v`, whose value currently is expressed in a coordinate frame SRC
+-- into it's equivalent/component in the basis vec3 triad `basis`
+-- `frame_basis` triad represents the 3 vectors: right, forward, upward, that are expressed
+-- in coordinate frame SRC and themselves constitute the x,y,z axes of the local coordinate frame DST.
+local function transform(v__SRC, basis__SRC_DST)
+    return vec3(
+      v__SRC:dot(basis__SRC_DST.x),
+      v__SRC:dot(basis__SRC_DST.y),
+      v__SRC:dot(basis__SRC_DST.z)
+    )
+end
+
 local collision = require('core/cameraModes/collision')
 
 local C = {}
@@ -252,13 +264,57 @@ function C:update(data)
   self.lastCamDist = dist
   self.camResetted = math.max(self.camResetted - 1, 0)
 
+  --- start derpSOS
+  --- Naming Convention
+  --- <vector_name>__BODY_COORDFRAME: 
+  --- this is vector `<vector_name>` (remove the angle-brackets.). it may be a point or proper (affine) vector.
+  --- it is of frame/object BODY, and it's value is expressed in coordinate frame COORDFRAME.
+  --- typically you should put these values in a proper vec3/luaQuat and not expose them globally, for organisation.
+  ---
+  --- e.g:
+  ---   vel__VEHICLE_WORLD: VEHICLE'S velocity vector in world-space. 
+  ---   e.g if the vehicle goes 30m/s forward in +x direction in the global coordinate frame, it would be vel__VEHICLE_WORLD = vec3(30, 0, 0)
+  ---   e.g however if the vehicle goes the same 30m/s in -y direction in the global coordinate frame, it would be vel__VEHICLE_WORLD = vec3(0, -30, 0).
+  ---
+  --- e.g vel__VEHICLE_VEHICLE: VEHICLE's velocity vector in it's own coordinate frame.
+  --- e.g no matter what direction the vehicle faces in the world, if it travels forward 30m/s, vel__VEHICLE_VEHICLE always = vec3(0, 30, 0).
+
+  ---& utility vectors/variables
+  local updir__CAMERA_WORLD = updir__CAMERA_WORLD or up; updir__CAMERA_WORLD:normalize()
+
+  local camera_basis__WORLD = vec3(
+    right__CAMERA_WORLD,
+    dir_target,
+    updir__CAMERA_WORLD
+  )
+  local vehicle_basis__WORLD = vec3(
+    (-left):normalized(),
+    dir:normalized(),
+    up:normalized()
+  )
+
+  local qdir__CAMERA_TARGET = quatFromDir(camera_basis__WORLD.y, camera_basis__WORLD.z)
+  -- this is the quaternion that would rotate an object from being in the world's coordinate frame, to giving it's world value of that vector's equivalent within
+  -- the local VEHICLE coordinate frame. invertible, composible, applicable. yummy.
+  local qdir__VEHICLE_WORLD = quatFromDir(vehicle_basis__WORLD.y, vehicle_basis__WORLD.z)
+
+
+  local dt__WORLD = data.dt
+  -- TODO: vehicle mass, jerk
+
+  local vel__VEHICLE_WORLD = data.vel
+  local accel__VEHICLE_WORLD = (vel__VEHICLE_WORLD - data.prevVel) / dt__WORLD
+
+  local vel_VEHICLE_VEHICLE   = transform(vel__VEHICLE_WORLD, vehicle_basis__WORLD)
+  local accel_VEHICLE_VEHICLE = transform(accel__VEHICLE_WORLD, vehicle_basis__WORLD)
+
+  --- end derpSOS
+
   -- application
   data.res.pos = camPos
   data.res.rot = qdir_target
-  data.res.fov = self.fov -- +70
+  data.res.fov = self.fov
   data.res.targetPos = targetPos
-
-  -- dump(data.res)
 
   self.collision:update(data)
   return true
