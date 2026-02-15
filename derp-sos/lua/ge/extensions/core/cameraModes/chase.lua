@@ -2,51 +2,11 @@
 -- If a copy of the bCDDL was not distributed with this
 -- file, You can obtain one at http://beamng.com/bCDDL-1.1.txt
 
-local function drawPoint(point, text, color)
-  debugDrawer:drawSphere(point, 0.05, color, false)
-  debugDrawer:drawText(point, text, color, false)
-  print(text, dump(point))
-end
-
-local function drawVec(point, text, color)
-  drawPoint(point, text, color)
-  debugDrawer:drawSphere(vec3(0,0,0), 0.05, ColorF(0,0,0,1), false)
-  debugDrawer:drawLine(vec3(0,0,0), point, color, 0.04)
-end
-
-local function drawBasis(basis_quat, basis_name)
-  -- typically basis_quat is the object's forward facing direction
-  drawVec((basis_quat * vec3(1,0,0)):normalized(), basis_name..".x", ColorF(1,0,0,1))
-  drawVec((basis_quat * vec3(0,1,0)):normalized(), basis_name..".y", ColorF(0,1,0,1))
-  drawVec((basis_quat * vec3(0,0,1)):normalized(), basis_name..".z", ColorF(0,0,1,1))
-end
-
-local function round(vec, eps)
-    eps = eps or 1
-    local out = vec3()
-    out.x = math.floor(vec.x / eps + 0.5) * eps
-    out.y = math.floor(vec.y / eps + 0.5) * eps
-    out.z = math.floor(vec.z / eps + 0.5) * eps
-    return out
-end
-
--- transform the vec3 `v`, whose value currently is expressed in a coordinate frame SRC
--- into it's equivalent/component in the basis vec3-table triad `basis`
--- `frame_basis` triad represents the 3 vectors: right, forward, upward, that are expressed
--- in coordinate frame SRC and themselves constitute the x,y,z axes of the local coordinate frame DST.
-local function transform(v__SRC, basis__SRC_DST)
-    return vec3(
-      v__SRC:dot(basis__SRC_DST.x),
-      v__SRC:dot(basis__SRC_DST.y),
-      v__SRC:dot(basis__SRC_DST.z)
-    )
-end
-
 local vecY = vec3(0,1,0)
 local vecZ = vec3(0,0,1)
 
 local collision = require('core/cameraModes/collision')
-local fxcontrol__derp_sos = require('core.derp-sos.fxcontrol')
+local fxcontrol__derp_sos = require('derp-sos/fxcontrol')
 
 local C = {}
 C.__index = C
@@ -274,49 +234,18 @@ function C:update(data)
   self.camResetted = math.max(self.camResetted - 1, 0)
 
   --- start derpSOS
-  --- Naming Convention
-  --- <vector_name>__BODY_COORDFRAME: 
-  --- this is vector `<vector_name>` (remove the angle-brackets.). it may be a point or proper (affine) vector and theres no convention differentiating the 2
-  --- it is of frame/object BODY, and it's value is expressed in coordinate frame COORDFRAME.
-  --- typically you should put these values in a proper vec3/luaQuat and not expose them globally, for organisation.
-  ---
-  --- e.g:
-  ---   vel__VEHICLE_WORLD: VEHICLE'S velocity vector in world-space. 
-  ---   e.g if the vehicle goes 30m/s forward in +x direction in the global coordinate frame, it would be vel__VEHICLE_WORLD = vec3(30, 0, 0)
-  ---   e.g however if the vehicle goes the same 30m/s in -y direction in the global coordinate frame, it would be vel__VEHICLE_WORLD = vec3(0, -30, 0).
-  ---
-  --- e.g vel__VEHICLE_VEHICLE: VEHICLE's velocity vector in it's own coordinate frame.
-  --- e.g no matter what direction the vehicle faces in the world, if it travels forward 30m/s, vel__VEHICLE_VEHICLE always = vec3(0, 30, 0).
-
-  local veh_backwards__WORLD = quatFromDir(-(ref-back):normalized(), (ref-back):cross(ref-left):normalized())
-  -- q*(1,0,0) -> that space's +x basis vector, but how world space sees it
-  -- q*(0,1,0) -> .. +y ..
-  -- q*(0,0,1) -> .. +z ..
-
-  -- wanna rotate cam_dir? pre-multiply it with a quatFromAxisAngle(
-  --  cam_dir_WORLD * whatever axis u wanna rotate around vecXYZ or whatever, 
-  --  desired Angle
-  -- )
-
-  -- origin: means that now VEHICLE may be a coordinate space. "VEHICLE" is in the coordinate spaces namespace.
-  -- ref is position of vehicle chassis origin, within and with respect to vehicle's local coordinate space.
-
-  -- note: beamng camera uses perspective view. not isometric, orthographic
-
   -- TODO: vehicle mass
 
-  local vel__VEHICLE_WORLD = data.vel
+  local veh_backwards__WORLD = quatFromDir(-(ref-back):normalized(), (ref-back):cross(ref-left):normalized())
 
   local datapkg = {
     dt = data.dt,
 
-    origin__VEHICLE__WORLD = data.vehPos, -- chose this cus 64 bit float is accurater
-    origin__TARGET__WORLD = (data.vehPos + ref) + (veh_backwards__WORLD * self.offset),
-
+          origin__VEHICLE__WORLD = data.vehPos, -- 64b float is more accurate
     chassis_base__VEHICLE__WORLD = data.vehPos + ref,
+          origin__TARGET__WORLD = (data.vehPos + ref) + (veh_backwards__WORLD * self.offset),
 
-    -- give this a world vec. it will return the world value of (that vector but in the camera's axes)
-    -- quat representing the vehicle's current orientation in the world. the component vectors are the vehicle's dir-vectors.
+    -- the component vectors are the vehicle's dir-vectors.
     dir__VEHICLE_WORLD = quatFromDir(
       (ref-back):normalized(),
       (ref-left):cross(ref-back):normalized()
@@ -325,17 +254,15 @@ function C:update(data)
 
     -- to recompute or to overshare? that is the question
     vel__VEHICLE_WORLD = data.vel,
-    accel__VEHICLE_WORLD = (vel__VEHICLE_WORLD - data.prevVel) / data.dt,
+    accel__VEHICLE_WORLD = (data.vel - data.prevVel) / data.dt,
   }
 
-  self.fxcontrol__derp_sos:input(datapkg)
-
   -- final filtered, fx'ed camera outputs
-  local cam_res = self.fxcontrol__derp_sos:output()
-  camPos      = cam_res.pos
+  local cam_res = self.fxcontrol__derp_sos:calculate(datapkg)
+  --camPos      = cam_res.pos
   qdir_target = cam_res.rot
-  self.fov    = cam_res.fov
-  targetPos   = cam_res.targetPos
+  --self.fov    = cam_res.fov
+  --targetPos   = cam_res.targetPos
 
   --- end derpSOS
 
