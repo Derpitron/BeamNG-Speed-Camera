@@ -34,6 +34,10 @@ local function round(vec, eps)
     return out
 end
 
+local function clamp(val, low, high)
+    return math.min(math.max(val, low), high)
+end
+
 X = vec3(1, 0, 0)
 Y = vec3(0, 1, 0)
 Z = vec3(0, 0, 1)
@@ -49,6 +53,7 @@ local temporal_spring = newTemporalSpring()
 local temporal_sigmoid = newTemporalSigmoidSmoothing()
 local temporal_exponential = newTemporalSmoothingNonLinear()
 
+
 local function accel_pitch(
     accel__VEHICLE_WORLD,
     dir__VEHICLE_WORLD,
@@ -57,18 +62,18 @@ local function accel_pitch(
 )
     local accel__VEHICLE = (dir__VEHICLE_WORLD:inversed() * accel__VEHICLE_WORLD)
     local accelF = accel__VEHICLE.y
+    local accelF_exponential = temporal_exponential:getWithRate(accelF, dt, 8)
     local accelF_linear = temporal_linear:getWithRate(accelF, dt, 8)
     local accelF_spring = temporal_spring:getWithSpringDamp(accelF, dt, 8, 10)
     local accelF_sigmoid = temporal_sigmoid:getWithRateAccel(accelF, dt, 8, 10, 30)
-    local accelF_exponential = temporal_exponential:getWithRate(accelF, dt, 8)
 
     local y_scale = 15
     guihooks.graph(
         { "acc raw", accelF, y_scale, "" },
-        { "linear", accelF_linear, y_scale, ""},
-        { "spring", accelF_spring, y_scale, ""},
-        { "sigmoid", accelF_sigmoid, y_scale, ""},
-        { "exponential", accelF_exponential, y_scale, ""}
+        { "linear", accelF_linear, y_scale, "" },
+        { "spring", accelF_spring, y_scale, "" },
+        { "sigmoid", accelF_sigmoid, y_scale, "" },
+        { "exponential", accelF_exponential, y_scale, "" }
     )
 
     -- this sets the axis to be the vehicle's x axis, but in terms the camera understands. you may set only `X` as well if you want
@@ -103,33 +108,62 @@ end
 function C:calculate(input)
     if input == nil then
         input = {
-            dt = 0.0,
+            dt = 0.0,    -- gfx dt
+            dtSim = 0.0, -- physics dt. = 0 at game pause
 
-            origin__VEHICLE__WORLD = vec3(),
-            chassis_base__VEHICLE__WORLD = vec3(),
-            origin__TARGET__WORLD = vec3(),
-            -- TODO: shim calculatedCamPos
+            vehicle_w = {
+                pos = vec3(),
+                rot = quatFromAxisAngle(X, 0.0),
+                vel = vec3(),
+                accel = vec3()
+            },
 
-            dir__VEHICLE_WORLD = quatFromDir(vec3(1, 0, 0), 0),
-            dir__CAMERA_WORLD = quatFromDir(vec3(1, 0, 0), 0),
+            target_w = {
+                pos = vec3()
+            },
 
-            vel__VEHICLE_WORLD = vec3(),
-            accel__VEHICLE_WORLD = vec3(),
+            inputorbit = {
+                rot__camera_t = vec3(),
+                radius = 0.0
+            },
+
+            fov = 0.0
         }
     end
 
-    -- the order of application matters here.
-    local final_rot = accel_pitch(input.accel__VEHICLE_WORLD, input.dir__VEHICLE_WORLD, input.dir__CAMERA_WORLD, input.dt) *
-    input.dir__CAMERA_WORLD
+    --#region accel pushback
+    local accel_v = input.vehicle_w.rot:inversed() * input.vehicle_w.accel
+    local accelF_exponential = temporal_exponential:getWithRate(accel_v.y, input.dt, 2)
+    local offset_c__accelpushback = ((input.vehicle_w.rot * Y) * ((-accelF_exponential)/20)) + ((input.vehicle_w.rot * Z) * ((-accelF_exponential)/20))
+    --#endregion
 
-    local cam_res = {
-        pos = vec3(),
-        rot = final_rot,
-        fov = 0.0,
-        targetPos = vec3()
+    --#region inputorbit FX
+    --- set the user inputted revolution/orbit of the camera
+    local camera_t__inputorbit =  { pos = input.inputorbit.radius * vec3(
+        math.sin(input.inputorbit.rot__camera_t.x) * math.cos(input.inputorbit.rot__camera_t.y),
+        math.cos(input.inputorbit.rot__camera_t.x) * math.cos(input.inputorbit.rot__camera_t.y),
+        math.sin(input.inputorbit.rot__camera_t.y)
+    ) }
+    --- transform the camera to world space equivalent, centred on target
+    local camera_w__inputorbit = {
+        pos = input.target_w.pos + ( (quatFromAxisAngle(Z, math.pi) * input.vehicle_w.rot) * camera_t__inputorbit.pos),
     }
 
-    return cam_res
+    local camera_w__inputorbit_accelpushback = {
+        pos = camera_w__inputorbit.pos + offset_c__accelpushback,
+    }
+    -- set camera direction to face target
+    camera_w__inputorbit_accelpushback.rot = quatFromDir( (input.target_w.pos - camera_w__inputorbit_accelpushback.pos):normalized(), input.vehicle_w.rot*Z )
+    --#endregion
+
+    local camera_w__result = {
+        pos = camera_w__inputorbit_accelpushback.pos,
+        rot = camera_w__inputorbit_accelpushback.rot,
+        fov = input.fov,
+        targetPos = input.target_w.pos
+    }
+
+    return camera_w__result
 end
 
 -- DO NOT CHANGE CLASS IMPLEMENTATION BELOW

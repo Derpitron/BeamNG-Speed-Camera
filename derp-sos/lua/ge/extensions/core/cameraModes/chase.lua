@@ -2,8 +2,8 @@
 -- If a copy of the bCDDL was not distributed with this
 -- file, You can obtain one at http://beamng.com/bCDDL-1.1.txt
 
-local vecY = vec3(0,1,0)
-local vecZ = vec3(0,0,1)
+local vecY = vec3(0, 1, 0)
+local vecZ = vec3(0, 0, 1)
 
 local collision = require('core/cameraModes/collision')
 local fxcontrol__derp_sos = require('derp-sos/fxcontrol')
@@ -74,15 +74,15 @@ local rot = vec3()
 function C:update(data)
   data.res.collisionCompatible = true
   -- update input
-  local deadzone = 0.5
-  self.relYaw =   clamp(self.relYaw   + 0.15*MoveManager.yawRelative  , -1, 1)
-  self.relPitch = clamp(self.relPitch + 0.15*MoveManager.pitchRelative, -1, 1)
-  local relYawUsed   = self.relYaw
-  local relPitchUsed = self.relPitch
-  if math.abs(relYawUsed)   < deadzone then relYawUsed   = 0 end
+  local deadzone               = 0.5
+  self.relYaw                  = clamp(self.relYaw + 0.15 * MoveManager.yawRelative, -1, 1)
+  self.relPitch                = clamp(self.relPitch + 0.15 * MoveManager.pitchRelative, -1, 1)
+  local relYawUsed             = self.relYaw
+  local relPitchUsed           = self.relPitch
+  if math.abs(relYawUsed) < deadzone then relYawUsed = 0 end
   if math.abs(relPitchUsed) < deadzone then relPitchUsed = 0 end
 
-  local dx = 200*relYawUsed + 100*data.dt*(MoveManager.yawRight - MoveManager.yawLeft)
+  local dx = 200 * relYawUsed + 100 * data.dt * (MoveManager.yawRight - MoveManager.yawLeft)
   self.camRot.x = 0
   if not self.forwardLooking then
     self.camRot.x = -180
@@ -99,7 +99,7 @@ function C:update(data)
     self.camRot.x = -self.camRot.x
   end
 
-  local dy = 200*relPitchUsed + 100*data.dt*(MoveManager.pitchUp - MoveManager.pitchDown)
+  local dy = 200 * relPitchUsed + 100 * data.dt * (MoveManager.pitchUp - MoveManager.pitchDown)
   self.camRot.y = self.defaultRotation.y
   if dy > triggerValue then
     self.camRot.y = self.defaultRotation.y + 30
@@ -136,8 +136,8 @@ function C:update(data)
   local back = data.veh:getNodePosition(self.refNodes.back)
 
   -- calculate the camera offset: rotate with the vehicle
-  local nx = left - ref
-  local ny = back - ref
+  local nx   = left - ref
+  local ny   = back - ref
 
   if nx:squaredLength() == 0 or ny:squaredLength() == 0 then
     data.res.pos = data.pos
@@ -148,9 +148,10 @@ function C:update(data)
   local nz = nx:cross(ny):normalized()
 
   if self.offset and self.offset.x then
-    self.camBase:set(self.offset.x / (nx:length() + 1e-30), self.offset.y / (ny:length() + 1e-30), self.offset.z / (nz:length() + 1e-30))
+    self.camBase:set(self.offset.x / (nx:length() + 1e-30), self.offset.y / (ny:length() + 1e-30),
+      self.offset.z / (nz:length() + 1e-30))
   else
-    self.camBase:set(0,0,0)
+    self.camBase:set(0, 0, 0)
   end
 
 
@@ -178,7 +179,8 @@ function C:update(data)
       -- if rolling is disabled, we are always up no matter what ...
       up:set(vecZ)
     end
-    dir:set(self.dirSmoothX:getUncapped(dir.x, data.dt*1000), self.dirSmoothY:getUncapped(dir.y, data.dt*1000), self.dirSmoothZ:getUncapped(dir.z, data.dt*1000)); dir:normalize()
+    dir:set(self.dirSmoothX:getUncapped(dir.x, data.dt * 1000), self.dirSmoothY:getUncapped(dir.y, data.dt * 1000),
+      self.dirSmoothZ:getUncapped(dir.z, data.dt * 1000)); dir:normalize()
   end
   self.camLastUp:set(up)
 
@@ -216,7 +218,7 @@ function C:update(data)
   local dist = 1 / (ratio + 1) * self.camDist + (ratio / (ratio + 1)) * self.camLastDist
 
   local calculatedCamPos = dist * vec3(
-     math.sin(rot.x) * math.cos(rot.y)
+    math.sin(rot.x) * math.cos(rot.y)
     , math.cos(rot.x) * math.cos(rot.y)
     , math.sin(rot.y)
   )
@@ -234,35 +236,49 @@ function C:update(data)
   self.camResetted = math.max(self.camResetted - 1, 0)
 
   --- start derpSOS
-  -- TODO: vehicle mass
+  --- conventions:
+  --- <variable>__<what it belongs to>_<what space it's in>__<effect name>
+  --- w, v, t, c means world, vehicle, target, camera space respectively.
+  ---
+  --- <effect name> from thereon means the first effect applied, then the next effect that's applied ON TOP OF THAT/DEPENDENT ON THAT, etc etc.
+  ---   e.g ...inputOrbit_...
+  -- TODO: vehicle mass, fov
 
-  local veh_backwards__WORLD = quatFromDir(-(ref-back):normalized(), (ref-back):cross(ref-left):normalized())
+  -- TODO: is this necessary
+  local rot__vehicle_w = quatFromDir(
+    -back:normalized(),
+    left:cross(back):normalized()
+  )
 
   local datapkg = {
-    dt = data.dt,
+    dt = data.dt,       -- gfx dt
+    dtSim = data.dtSim, -- physics dt. = 0 at game pause
 
-          origin__VEHICLE__WORLD = data.vehPos, -- 64b float is more accurate
-    chassis_base__VEHICLE__WORLD = data.vehPos + ref,
-          origin__TARGET__WORLD = (data.vehPos + ref) + (veh_backwards__WORLD * self.offset),
+    vehicle_w = {
+      pos = data.vehPos,
+      rot = rot__vehicle_w,
+      vel = data.vel,
+      accel = (data.vel - data.prevVel) / data.dt,
+    },
 
-    -- the component vectors are the vehicle's dir-vectors.
-    dir__VEHICLE_WORLD = quatFromDir(
-      (ref-back):normalized(),
-      (ref-left):cross(ref-back):normalized()
-    ),
-    dir__CAMERA_WORLD = qdir_target, -- quat representing camera's current rotation in the world
+    target_w = {
+      pos = data.vehPos + ((quatFromAxisAngle(Z, math.pi) * rot__vehicle_w) * self.offset)
+    },
 
-    -- to recompute or to overshare? that is the question
-    vel__VEHICLE_WORLD = data.vel,
-    accel__VEHICLE_WORLD = (data.vel - data.prevVel) / data.dt,
+    inputorbit = {
+      rot__camera_t = rot, -- TODO: better naming scheme
+      radius = dist
+    },
+
+    fov = self.fov
   }
 
   -- final filtered, fx'ed camera outputs
   local cam_res = self.fxcontrol__derp_sos:calculate(datapkg)
-  --camPos      = cam_res.pos
+  camPos      = cam_res.pos
   qdir_target = cam_res.rot
-  --self.fov    = cam_res.fov
-  --targetPos   = cam_res.targetPos
+  self.fov    = cam_res.fov
+  targetPos   = cam_res.targetPos
 
   --- end derpSOS
 
