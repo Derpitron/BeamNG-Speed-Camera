@@ -139,12 +139,17 @@ function C:calculate(input)
 
     --#region inputorbit FX
     --- set the user inputted revolution/orbit of the camera
+    --- this is where camera construction begins
     local camera_t__inputorbit =  { pos = input.inputorbit.radius * vec3(
         math.sin(input.inputorbit.rot__camera_t.x) * math.cos(input.inputorbit.rot__camera_t.y),
         math.cos(input.inputorbit.rot__camera_t.x) * math.cos(input.inputorbit.rot__camera_t.y),
         math.sin(input.inputorbit.rot__camera_t.y)
     ) }
     --- transform the camera to world space equivalent, centred on target
+
+    --#region ignore body pitching
+    
+
     local camera_w__inputorbit = {
         pos = input.target_w.pos + ( (quatFromAxisAngle(Z, math.pi) * input.vehicle_w.rot) * camera_t__inputorbit.pos),
     }
