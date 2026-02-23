@@ -250,11 +250,11 @@ function C:update(data)
     left:cross(back):normalized()
   )
 
-  local datapkg = {
+  local output = {
     dt = data.dt,       -- gfx dt
     dtSim = data.dtSim, -- physics dt. = 0 at game pause
 
-    vehicle_w = {
+    veh_w = {
       pos = data.vehPos,
       rot = rot__vehicle_w,
       vel = data.vel,
@@ -266,7 +266,7 @@ function C:update(data)
     },
 
     inputorbit = {
-      rot__camera_t = rot, -- TODO: better naming scheme
+      cam__rot_t = rot, -- TODO: better naming scheme
       radius = dist
     },
 
@@ -274,10 +274,10 @@ function C:update(data)
   }
 
   -- final filtered, fx'ed camera outputs
-  local cam_res = self.fxcontrol__derp_sos:calculate(datapkg)
+  local cam_res = self.fxcontrol__derp_sos:calculate(output)
   camPos      = cam_res.pos
   qdir_target = cam_res.rot
-  self.fov    = cam_res.fov
+  local fov    = cam_res.fov
   targetPos   = cam_res.targetPos
 
   --- end derpSOS
@@ -285,7 +285,7 @@ function C:update(data)
   -- application
   data.res.pos = camPos
   data.res.rot = qdir_target
-  data.res.fov = self.fov
+  data.res.fov = fov
   data.res.targetPos = targetPos
 
   self.collision:update(data)

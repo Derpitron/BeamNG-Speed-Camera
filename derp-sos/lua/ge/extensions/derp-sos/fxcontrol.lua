@@ -2,23 +2,30 @@
 -- written by Derpitron
 
 --#region tools
-local function drawPoint(point, text, color)
-    debugDrawer:drawSphere(point, 0.05, color, false)
-    debugDrawer:drawText(point, text, color, false)
+local function drawPoint(point, text, color, origin)
+    if origin == nil then origin = vec3() end
+
+    local newPoint = point
+    newPoint:setAdd(origin)
+
+    debugDrawer:drawSphere(newPoint, 0.05, color, false)
+    debugDrawer:drawText(newPoint, text, color, false)
     print(text, dump(point))
 end
 
-local function drawVec(point, text, color)
-    drawPoint(point, text, color)
-    debugDrawer:drawSphere(vec3(0, 0, 0), 0.05, ColorF(0, 0, 0, 1), false)
-    debugDrawer:drawLine(vec3(0, 0, 0), point, color, 0.04)
+local function drawVec(point, text, color, origin)
+    if origin == nil then origin = vec3() end
+    drawPoint(point, text, color, origin)
+    debugDrawer:drawSphere(origin, 0.05, ColorF(0, 0, 0, 1), false)
+    debugDrawer:drawLine(origin, point, color, 0.04)
 end
 
-local function drawBasis(basis_quat, basis_name)
     -- typically basis_quat is the object's forward facing direction
-    drawVec((basis_quat * vec3(1, 0, 0)):normalized(), basis_name .. ".x", ColorF(1, 0, 0, 1))
-    drawVec((basis_quat * vec3(0, 1, 0)):normalized(), basis_name .. ".y", ColorF(0, 1, 0, 1))
-    drawVec((basis_quat * vec3(0, 0, 1)):normalized(), basis_name .. ".z", ColorF(0, 0, 1, 1))
+local function drawBasis(basis_quat, basis_name, origin)
+    if origin == nil then origin = vec3() end
+    drawVec((basis_quat * vec3(1, 0, 0)):normalized(), basis_name .. ".x", ColorF(1, 0, 0, 1), origin)
+    drawVec((basis_quat * vec3(0, 1, 0)):normalized(), basis_name .. ".y", ColorF(0, 1, 0, 1), origin)
+    drawVec((basis_quat * vec3(0, 0, 1)):normalized(), basis_name .. ".z", ColorF(0, 0, 1, 1), origin)
 end
 
 local function drawOnGraph(val, text)
@@ -48,46 +55,8 @@ Z = vec3(0, 0, 1)
 -- quaternion and vec3 methods available in beamng engine: beamng/common/mathlib.lua (do NOT use euler angle api here. it is outdated and inconsistent. use quaternions to implement desired rotations in a specified, consistent order of axes.)
 -- function smoothers, filters, etc (signal processing): beamng/common/filters.lua
 
-local temporal_linear = newTemporalSmoothing()
-local temporal_spring = newTemporalSpring()
-local temporal_sigmoid = newTemporalSigmoidSmoothing()
 local temporal_exponential = newTemporalSmoothingNonLinear()
-
-
-local function accel_pitch(
-    accel__VEHICLE_WORLD,
-    dir__VEHICLE_WORLD,
-    dir__CAMERA_WORLD,
-    dt
-)
-    local accel__VEHICLE = (dir__VEHICLE_WORLD:inversed() * accel__VEHICLE_WORLD)
-    local accelF = accel__VEHICLE.y
-    local accelF_exponential = temporal_exponential:getWithRate(accelF, dt, 8)
-    local accelF_linear = temporal_linear:getWithRate(accelF, dt, 8)
-    local accelF_spring = temporal_spring:getWithSpringDamp(accelF, dt, 8, 10)
-    local accelF_sigmoid = temporal_sigmoid:getWithRateAccel(accelF, dt, 8, 10, 30)
-
-    local y_scale = 15
-    guihooks.graph(
-        { "acc raw", accelF, y_scale, "" },
-        { "linear", accelF_linear, y_scale, "" },
-        { "spring", accelF_spring, y_scale, "" },
-        { "sigmoid", accelF_sigmoid, y_scale, "" },
-        { "exponential", accelF_exponential, y_scale, "" }
-    )
-
-    -- this sets the axis to be the vehicle's x axis, but in terms the camera understands. you may set only `X` as well if you want
-    -- vehicle -> camera = (veh -> world) -> (cam -> world)^-1
-    local pitch_axis_accel = (dir__VEHICLE_WORLD * dir__CAMERA_WORLD:inversed()) * X -- pitch
-    local angle_rad_accel = math.rad(-(
-        accelF_exponential
-    ))
-    local pitch_accel__PITCH_CAMERA = quatFromAxisAngle(pitch_axis_accel, angle_rad_accel)
-
-    return pitch_accel__PITCH_CAMERA
-end
-
---#endregion
+local sin, cos = math.sin, math.cos
 
 local C = {}
 C.__index = C
@@ -111,7 +80,7 @@ function C:calculate(input)
             dt = 0.0,    -- gfx dt
             dtSim = 0.0, -- physics dt. = 0 at game pause
 
-            vehicle_w = {
+            veh_w = {
                 pos = vec3(),
                 rot = quatFromAxisAngle(X, 0.0),
                 vel = vec3(),
@@ -123,7 +92,7 @@ function C:calculate(input)
             },
 
             inputorbit = {
-                rot__camera_t = vec3(),
+                cam__rot_t = vec3(),
                 radius = 0.0
             },
 
@@ -131,44 +100,34 @@ function C:calculate(input)
         }
     end
 
-    --#region accel pushback
-    local accel_v = input.vehicle_w.rot:inversed() * input.vehicle_w.accel
-    local accelF_exponential = temporal_exponential:getWithRate(accel_v.y, input.dt, 2)
-    local offset_c__accelpushback = ((input.vehicle_w.rot * Y) * ((-accelF_exponential)/20)) + ((input.vehicle_w.rot * Z) * ((-accelF_exponential)/20))
-    --#endregion
-
     --#region inputorbit FX
     --- set the user inputted revolution/orbit of the camera
     --- this is where camera construction begins
-    local camera_t__inputorbit =  { pos = input.inputorbit.radius * vec3(
-        math.sin(input.inputorbit.rot__camera_t.x) * math.cos(input.inputorbit.rot__camera_t.y),
-        math.cos(input.inputorbit.rot__camera_t.x) * math.cos(input.inputorbit.rot__camera_t.y),
-        math.sin(input.inputorbit.rot__camera_t.y)
-    ) }
-    --- transform the camera to world space equivalent, centred on target
+    local cam_w = vec3( -- input orbit
+        sin(input.inputorbit.cam__rot_t.x) * cos(input.inputorbit.cam__rot_t.y),
+        cos(input.inputorbit.cam__rot_t.x) * cos(input.inputorbit.cam__rot_t.y),
+        sin(input.inputorbit.cam__rot_t.y)
+    )
+    cam_w:setScaled(input.inputorbit.radius)
+    cam_w:setRotate(quatFromAxisAngle(Z, math.pi) * input.veh_w.rot) -- implements world-space position *behind* car
+    cam_w:setAdd(input.target_w.pos)
 
-    --#region ignore body pitching
-    
+    -- axis direction from cam to target. angle is so the quat-rotation may point upwards
+    local dir_cam_w = quatFromDir(
+        input.target_w.pos - cam_w, -- dir
+        input.veh_w.rot*Z           -- up
+    )
 
-    local camera_w__inputorbit = {
-        pos = input.target_w.pos + ( (quatFromAxisAngle(Z, math.pi) * input.vehicle_w.rot) * camera_t__inputorbit.pos),
-    }
-
-    local camera_w__inputorbit_accelpushback = {
-        pos = camera_w__inputorbit.pos + offset_c__accelpushback,
-    }
-    -- set camera direction to face target
-    camera_w__inputorbit_accelpushback.rot = quatFromDir( (input.target_w.pos - camera_w__inputorbit_accelpushback.pos):normalized(), input.vehicle_w.rot*Z )
     --#endregion
 
-    local camera_w__result = {
-        pos = camera_w__inputorbit_accelpushback.pos,
-        rot = camera_w__inputorbit_accelpushback.rot,
+    local cam_w__result = {
+        pos = cam_w,
+        rot = dir_cam_w,
         fov = input.fov,
         targetPos = input.target_w.pos
     }
 
-    return camera_w__result
+    return cam_w__result
 end
 
 -- DO NOT CHANGE CLASS IMPLEMENTATION BELOW
