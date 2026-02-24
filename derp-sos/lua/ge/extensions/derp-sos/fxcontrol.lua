@@ -20,7 +20,7 @@ local function drawVec(point, text, color, origin)
     debugDrawer:drawLine(origin, point, color, 0.04)
 end
 
-    -- typically basis_quat is the object's forward facing direction
+-- typically basis_quat is the object's forward facing direction
 local function drawBasis(basis_quat, basis_name, origin)
     if origin == nil then origin = vec3() end
     drawVec((basis_quat * vec3(1, 0, 0)):normalized(), basis_name .. ".x", ColorF(1, 0, 0, 1), origin)
@@ -29,7 +29,7 @@ local function drawBasis(basis_quat, basis_name, origin)
 end
 
 local function drawOnGraph(val, text)
-    guihooks.graph({ text, val, 100, "" })
+    guihooks.graph({ text, val, 1000, "" })
 end
 
 local function round(vec, eps)
@@ -76,21 +76,27 @@ end
 
 function C:calculate(input)
     if input == nil then
+        -- coordinate frame conventions:
+        -- +x: rightward
+        -- +y: forward
+        -- +z: upward
+        -- always, even for vehicle.
         input = {
             dt = 0.0,    -- gfx dt
             dtSim = 0.0, -- physics dt. = 0 at game pause
 
-            veh_w = {
-                pos = vec3(),
-                rot = quat(),
-                vel = vec3(),
-                accel = vec3()
+            veh = {
+                pos = vec3(),  -- world. this is world position of `ref` refnode.
+                rot = quat(),  -- world
+                vel = vec3(),  -- local
+                accel = vec3() -- local
             },
 
-            target_vn = vec3(),
+            target_v = vec3(), -- wrt veh.pos, using the above coordinate axe conventions
 
-            inputorbit = {
-                cam__rot_t = vec3(),
+            pan = {
+                yaw = 0.0,   -- rads
+                pitch = 0.0, -- rads
                 radius = 0.0
             },
 
@@ -99,30 +105,27 @@ function C:calculate(input)
     end
 
     --#region inputorbit FX
-    local veh_revdir = quatFromAxisAngle(Z, math.pi) * input.veh_w.rot
-    local target_w = input.veh_w.pos + (veh_revdir*input.target_vn)
-
-    local cam_w = vec3( -- input orbit
-        sin(input.inputorbit.cam__rot_t.x) * cos(input.inputorbit.cam__rot_t.y),
-        cos(input.inputorbit.cam__rot_t.x) * cos(input.inputorbit.cam__rot_t.y),
-        sin(input.inputorbit.cam__rot_t.y)
+    local cam_t = vec3( -- input orbit
+        -1 * sin(input.pan.yaw) * cos(input.pan.pitch),
+        -1 * cos(input.pan.yaw) * cos(input.pan.pitch),
+        sin(input.pan.pitch)
     )
-    cam_w:setScaled(input.inputorbit.radius)
-    cam_w:setRotate(veh_revdir) -- implements world-space position *behind* car
-    cam_w:setAdd(target_w)
+    cam_t:setScaled(input.pan.radius)
 
-    local dir_cam_w = quatFromDir(
-        target_w - cam_w, -- dir
-        input.veh_w.rot*Z           -- up
+    local target_v = input.target_v
+
+    local dir_cam_v = quatFromDir(
+        -cam_t,
+        Z
     )
 
     --#endregion
 
     local cam_w__result = {
-        pos = cam_w,
-        rot = dir_cam_w,
+        pos = input.veh.pos + (input.veh.rot * (cam_t + target_v)),
+        rot = dir_cam_v * input.veh.rot,
         fov = input.fov,
-        targetPos = target_w
+        targetPos = input.veh.pos + (input.veh.rot * target_v)
     }
 
     return cam_w__result

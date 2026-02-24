@@ -147,7 +147,6 @@ function C:update(data)
 
   local nz = nx:cross(ny):normalized()
 
-  dump(self.offset)
   if self.offset and self.offset.x then
     self.camBase:set(self.offset.x / (nx:length() + 1e-30), self.offset.y / (ny:length() + 1e-30),
       self.offset.z / (nz:length() + 1e-30))
@@ -255,17 +254,18 @@ function C:update(data)
     dt = data.dt,       -- gfx dt
     dtSim = data.dtSim, -- physics dt. = 0 at game pause
 
-    veh_w = {
-      pos = data.vehPos,
-      rot = rot__vehicle_w,
-      vel = data.vel,
-      accel = (data.vel - data.prevVel) / data.dt,
+    veh = {
+      pos = data.vehPos,  -- world space pos
+      rot = rot__vehicle_w, -- world space rot
+      vel =  rot__vehicle_w:inversed() * vel, -- local vel
+      accel = rot__vehicle_w:inversed() * ((vel - data.prevVel) / data.dt), -- local accel
     },
 
-    target_vn = self.offset,
+    target_v = quatFromAxisAngle(Z, math.pi) * self.offset,
 
-    inputorbit = {
-      cam__rot_t = rot, -- TODO: better naming scheme
+    pan = { -- user inputted effect
+      yaw = rot.x,
+      pitch = rot.y,
       radius = dist
     },
 
