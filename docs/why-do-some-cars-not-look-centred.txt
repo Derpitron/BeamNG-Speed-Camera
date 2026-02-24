@@ -1,6 +1,14 @@
 # for mod developers/patchers:
 
-some third party vehicles have not set their offset, orbitOffset, chaseOffset, default, minDistance variables for their cameras properly.
+some third party vehicles have not set their:
+
+offset
+orbitOffset
+chaseOffset
+default
+minDistance 
+
+variables for their cameras properly.
 this is why chase.lua, orbit.lua, and my camera don't look centred on those vehicles. this is not a problem of my or beamng's camera code and
 adding individual fixes for each modded vehicle is out of scope for this mod.
 

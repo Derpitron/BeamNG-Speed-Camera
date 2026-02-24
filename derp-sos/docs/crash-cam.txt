@@ -1,3 +1,0 @@
-if sign of velocity/displacement vector, and that of the jerk vector is opposite, and the jerk is greater than -2 or -3 m/s3, then u know u have a crash.
-
-dont model a point, simulate it?
