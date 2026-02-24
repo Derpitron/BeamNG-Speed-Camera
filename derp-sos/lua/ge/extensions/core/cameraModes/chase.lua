@@ -147,6 +147,7 @@ function C:update(data)
 
   local nz = nx:cross(ny):normalized()
 
+  dump(self.offset)
   if self.offset and self.offset.x then
     self.camBase:set(self.offset.x / (nx:length() + 1e-30), self.offset.y / (ny:length() + 1e-30),
       self.offset.z / (nz:length() + 1e-30))
@@ -261,9 +262,7 @@ function C:update(data)
       accel = (data.vel - data.prevVel) / data.dt,
     },
 
-    target_w = {
-      pos = data.vehPos + ((quatFromAxisAngle(Z, math.pi) * rot__vehicle_w) * self.offset)
-    },
+    target_vn = self.offset,
 
     inputorbit = {
       cam__rot_t = rot, -- TODO: better naming scheme

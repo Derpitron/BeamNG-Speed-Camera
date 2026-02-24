@@ -82,14 +82,12 @@ function C:calculate(input)
 
             veh_w = {
                 pos = vec3(),
-                rot = quatFromAxisAngle(X, 0.0),
+                rot = quat(),
                 vel = vec3(),
                 accel = vec3()
             },
 
-            target_w = {
-                pos = vec3()
-            },
+            target_vn = vec3(),
 
             inputorbit = {
                 cam__rot_t = vec3(),
@@ -101,20 +99,20 @@ function C:calculate(input)
     end
 
     --#region inputorbit FX
-    --- set the user inputted revolution/orbit of the camera
-    --- this is where camera construction begins
+    local veh_revdir = quatFromAxisAngle(Z, math.pi) * input.veh_w.rot
+    local target_w = input.veh_w.pos + (veh_revdir*input.target_vn)
+
     local cam_w = vec3( -- input orbit
         sin(input.inputorbit.cam__rot_t.x) * cos(input.inputorbit.cam__rot_t.y),
         cos(input.inputorbit.cam__rot_t.x) * cos(input.inputorbit.cam__rot_t.y),
         sin(input.inputorbit.cam__rot_t.y)
     )
     cam_w:setScaled(input.inputorbit.radius)
-    cam_w:setRotate(quatFromAxisAngle(Z, math.pi) * input.veh_w.rot) -- implements world-space position *behind* car
-    cam_w:setAdd(input.target_w.pos)
+    cam_w:setRotate(veh_revdir) -- implements world-space position *behind* car
+    cam_w:setAdd(target_w)
 
-    -- axis direction from cam to target. angle is so the quat-rotation may point upwards
     local dir_cam_w = quatFromDir(
-        input.target_w.pos - cam_w, -- dir
+        target_w - cam_w, -- dir
         input.veh_w.rot*Z           -- up
     )
 
@@ -124,7 +122,7 @@ function C:calculate(input)
         pos = cam_w,
         rot = dir_cam_w,
         fov = input.fov,
-        targetPos = input.target_w.pos
+        targetPos = target_w
     }
 
     return cam_w__result
