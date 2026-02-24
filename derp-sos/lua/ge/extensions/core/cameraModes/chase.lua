@@ -28,8 +28,10 @@ function C:init()
   self.collision = collision()
   self.collision:init()
 
+  --#region derp_sos
   self.fxcontrol__derp_sos = fxcontrol__derp_sos()
-  self.fxcontrol__derp_sos:hello_world()
+  self.fxcontrol__derp_sos:init()
+  --#endregion
 
   self:onVehicleCameraConfigChanged()
   self:onSettingsChanged()
@@ -232,10 +234,10 @@ function C:update(data)
   local qdir_target = quatFromDir(dir_target, up)
 
   self.camLastRot:set(rot)
-  self.camLastDist = dist
-  self.camResetted = math.max(self.camResetted - 1, 0)
+  self.camLastDist     = dist
+  self.camResetted     = math.max(self.camResetted - 1, 0)
 
-  --- start derpSOS
+  --#region derp_sos
   --- conventions:
   --- <variable>__<what it belongs to>_<what space it's in>__<effect name>
   --- w, v, t, c means world, vehicle, target, camera space respectively.
@@ -250,20 +252,20 @@ function C:update(data)
     left:cross(back):normalized()
   )
 
-  local output = {
-    dt = data.dt,       -- gfx dt
-    dtSim = data.dtSim, -- physics dt. = 0 at game pause
+  local output         = {
+    dt = data.dt,
+    dtSim = data.dtSim,
 
     veh = {
-      pos = data.vehPos,  -- world space pos
-      rot = rot__vehicle_w, -- world space rot
-      vel =  rot__vehicle_w:inversed() * vel, -- local vel
-      accel = rot__vehicle_w:inversed() * ((vel - data.prevVel) / data.dt), -- local accel
+      pos = data.vehPos,
+      rot = rot__vehicle_w,
+      vel = rot__vehicle_w:inversed() * vel,
+      accel = rot__vehicle_w:inversed() * ((vel - data.prevVel) / data.dt),
     },
 
     target_v = quatFromAxisAngle(Z, math.pi) * self.offset,
 
-    pan = { -- user inputted effect
+    pan = {
       yaw = rot.x,
       pitch = rot.y,
       radius = dist
@@ -273,19 +275,18 @@ function C:update(data)
   }
 
   -- final filtered, fx'ed camera outputs
-  local cam_res = self.fxcontrol__derp_sos:calculate(output)
-  camPos      = cam_res.pos
-  qdir_target = cam_res.rot
-  local fov    = cam_res.fov
-  targetPos   = cam_res.targetPos
-
-  --- end derpSOS
+  local cam_res        = self.fxcontrol__derp_sos:calculate(output)
+  camPos               = cam_res.pos
+  qdir_target          = cam_res.rot
+  local fov            = cam_res.fov
+  targetPos            = cam_res.targetPos
+  --#endregion
 
   -- application
-  data.res.pos = camPos
-  data.res.rot = qdir_target
-  data.res.fov = fov
-  data.res.targetPos = targetPos
+  data.res.pos         = camPos
+  data.res.rot         = qdir_target
+  data.res.fov         = fov
+  data.res.targetPos   = targetPos
 
   self.collision:update(data)
   return true

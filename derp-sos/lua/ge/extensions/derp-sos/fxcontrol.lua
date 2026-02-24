@@ -49,14 +49,14 @@ X = vec3(1, 0, 0)
 Y = vec3(0, 1, 0)
 Z = vec3(0, 0, 1)
 
+local sin, cos, pi, rad = math.sin, math.cos, math.pi, math.rad
+
 --#endregion
 
---#region fx
 -- quaternion and vec3 methods available in beamng engine: beamng/common/mathlib.lua (do NOT use euler angle api here. it is outdated and inconsistent. use quaternions to implement desired rotations in a specified, consistent order of axes.)
 -- function smoothers, filters, etc (signal processing): beamng/common/filters.lua
 
 local temporal_exponential = newTemporalSmoothingNonLinear()
-local sin, cos = math.sin, math.cos
 
 local C = {}
 C.__index = C
@@ -70,11 +70,8 @@ function C:init()
     print("initalised derp_sos camera")
 end
 
-function C:hello_world()
-    print("hello from derp_sos!")
-end
-
 function C:calculate(input)
+    --#region data schema
     if input == nil then
         -- coordinate frame conventions:
         -- +x: rightward
@@ -86,10 +83,10 @@ function C:calculate(input)
             dtSim = 0.0, -- physics dt. = 0 at game pause
 
             veh = {
-                pos = vec3(),  -- world. this is world position of `ref` refnode.
-                rot = quat(),  -- world
-                vel = vec3(),  -- local
-                accel = vec3() -- local
+                pos = vec3(),  -- position of `ref` node in world
+                rot = quat(),  -- rotation of vehicle in world
+                vel = vec3(),  -- local vehicle velocity
+                accel = vec3() -- local vehicle acceleration
             },
 
             target_v = vec3(), -- wrt veh.pos, using the above coordinate axe conventions
@@ -97,40 +94,39 @@ function C:calculate(input)
             pan = {
                 yaw = 0.0,   -- rads
                 pitch = 0.0, -- rads
-                radius = 0.0
+                radius = 0.0 -- metres
             },
 
-            fov = 0.0
+            fov = 0.0 -- degrees
         }
     end
+    --#endregion
 
-    --#region inputorbit FX
-    local cam_t = vec3( -- input orbit
+    --#region FX: pan
+    local cam_t__pan = vec3( -- input orbit
         -1 * sin(input.pan.yaw) * cos(input.pan.pitch),
         -1 * cos(input.pan.yaw) * cos(input.pan.pitch),
         sin(input.pan.pitch)
     )
-    cam_t:setScaled(input.pan.radius)
-
-    local target_v = input.target_v
+    cam_t__pan:setScaled(input.pan.radius)
 
     local dir_cam_v = quatFromDir(
-        -cam_t,
-        Z
+        -cam_t__pan, -- dir
+        Z            -- up
     )
-
+    local cam_v__pan = cam_t__pan + input.target_v
     --#endregion
 
     local cam_w__result = {
-        pos = input.veh.pos + (input.veh.rot * (cam_t + target_v)),
+        pos = input.veh.pos + (input.veh.rot * cam_v__pan),
         rot = dir_cam_v * input.veh.rot,
         fov = input.fov,
-        targetPos = input.veh.pos + (input.veh.rot * target_v)
+        targetPos = input.veh.pos + (input.veh.rot * input.target_v)
     }
-
     return cam_w__result
 end
 
+--#region boilerplate
 -- DO NOT CHANGE CLASS IMPLEMENTATION BELOW
 
 return function(...)
@@ -139,3 +135,4 @@ return function(...)
     o:init()
     return o
 end
+--#endregion
