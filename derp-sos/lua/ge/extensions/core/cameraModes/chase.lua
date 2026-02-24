@@ -4,58 +4,35 @@
 
 local collision = require('core/cameraModes/collision')
 
-local function debuggy(point, text, color)
-  debugDrawer:drawSphere(point, 0.05, color, false)
-  debugDrawer:drawText(point, text, color, false)
-  print(text, dump(point))
-end
-
--- Inverse of LuaQuat:setFromEuler(x,y,z)
-local function getEulerForSetFromEuler(q)
-  -- q.x, q.y, q.z, q.w expected from your module's quaternion type
-  local qx, qy, qz, qw = q.x, q.y, q.z, q.w
-
-  -- rotation-matrix terms (standard quaternion -> rotation-matrix)
-  local R11 = 1 - 2 * (qy*qy + qz*qz)
-  local R21 = 2 * (qx*qy + qw*qz)
-  local R31 = 2 * (qx*qz - qw*qy)
-
-  local R22 = 1 - 2 * (qx*qx + qz*qz)
-  local R23 = 2 * (qy*qz - qw*qx)
-
-  -- Y-Z-X extraction: alpha = Y, beta = Z, gamma = X
-  local alpha = math.atan2(-R31, R11)                         -- Y
-  local beta  = math.asin( math.max(-1, math.min(1, R21)) )   -- Z (clamped)
-  local gamma = math.atan2(-R23, R22)                         -- X
-
-  -- return table as vec3(x=gamma, y=alpha, z=beta) ready for setFromEuler
-  return vec3(gamma, alpha, beta)
-end
-
+local collision = require('core/cameraModes/collision')
+local fxcontrol__derp_sos = require('derp-sos/fxcontrol')
 
 local C = {}
 C.__index = C
 
 function C:init()
   self.disabledByDefault = true
-  self.lastCamRot = vec3()
+  self.camLastRot = vec3()
   self.fwdVeloSmoother = newTemporalSmoothing(100)
   local chaseDirSmoothCoef = 0.0008
   self.dirSmoothX = newTemporalSmoothing(chaseDirSmoothCoef)
   self.dirSmoothY = newTemporalSmoothing(chaseDirSmoothCoef)
   self.dirSmoothZ = newTemporalSmoothing(chaseDirSmoothCoef)
-
-  --prev pos, vel provided by camData
-  self.prev_veh_accel = vec3(0,0,0)
-  self.prev_veh_jerk = vec3(0,0,0)
-
-  self.last_cam_upVector = vec3(0,0,1)
+  self.lastDataPos = vec3()
+  self.forwardLooking = true
+  self.lastRefPos = vec3()
+  self.camLastUp = vec3()
   self.camResetted = 0
 
   self.sumDt = 0
 
   self.collision = collision()
   self.collision:init()
+
+  --#region derp_sos
+  self.fxcontrol__derp_sos = fxcontrol__derp_sos()
+  self.fxcontrol__derp_sos:init()
+  --#endregion
 
   self:onVehicleCameraConfigChanged()
   self:onSettingsChanged()
@@ -73,8 +50,8 @@ function C:onVehicleCameraConfigChanged()
   self.camMinDist = self.distanceMin or 3
   self.distance = self.distance or 5
   self.defaultDistance = self.distance
-  self.dist = self.defaultDistance
-  self.lastCamDist = self.defaultDistance
+  self.camDist = self.defaultDistance
+  self.camLastDist = self.defaultDistance
   self.mode = self.mode or 'ref'
   self.fov = self.fov or 65
   self.offset = vec3(self.offset)
@@ -124,30 +101,108 @@ function C:update(data)
   local veh_accel = vec3((data.vel - data.prevVel) / data.dtSim)
   local veh_jerk = vec3((veh_accel - self.prev_veh_accel) / data.dtSim)
 
+  -- make sure the rotation is never bigger than 2 PI
+  if self.camRot.x > 180 then
+    self.camRot.x = self.camRot.x - 360
+    self.camLastRot.x = self.camLastRot.x - math.pi * 2
+  elseif self.camRot.x < -180 then
+    self.camRot.x = self.camRot.x + 360
+    self.camLastRot.x = self.camLastRot.x + math.pi * 2
+  end
+
+  local ddist = 0.1 * data.dt * (MoveManager.zoomIn - MoveManager.zoomOut) * self.fov
+  self.camDist = self.defaultDistance
+  if ddist > triggerValue then
+    self.camDist = self.defaultDistance * 2
+  elseif ddist < -triggerValue then
+    self.camDist = self.camMinDist
+  end
 
   --
-  -- CAMERA DATA
-  -- All this data is respective to the camera itself.
-  --
+  local ref  = data.veh:getNodePosition(self.refNodes.ref)
+  local left = data.veh:getNodePosition(self.refNodes.left)
+  local back = data.veh:getNodePosition(self.refNodes.back)
 
-  local cam_leftVector = vec3(1,0,0)
-  local cam_backVector = vec3(0,1,0)
-  local cam_upVector = vec3(0,0,1)
+  -- calculate the camera offset: rotate with the vehicle
+  local nx = left - ref
+  local ny = back - ref
 
   local cam_offset = vec3(self.offset)
 
-  self.camBase:set(
-    cam_offset.x * veh_leftVector +
-    cam_offset.y * veh_backVector +
-    cam_offset.z * veh_upVector
-  )
+  local nz = nx:cross(ny):normalized()
+
+  if self.offset and self.offset.x then
+    self.camBase:set(self.offset.x / (nx:length() + 1e-30), self.offset.y / (ny:length() + 1e-30), self.offset.z / (nz:length() + 1e-30))
+  else
+    self.camBase:set(0,0,0)
+  end
 
 
-  -- Applies local panning to camPos. doesn't yet consider the veicle's rotation. local to the vehicle's coordinate frame only.
-  local camPos_R = self.dist * vec3(
-      - (math.sin(math.rad(self.rot.x)) * math.cos(math.rad(self.rot.y))) -- yaw (eventually about vehicle
-    , math.cos(math.rad(self.rot.x)) * math.cos(math.rad(self.rot.y)) -- pitch (eventually about vehicle
-    , math.sin(math.rad(self.rot.y))                                  -- roll (eventually about vehicle
+  local targetPos
+  if self.mode == 'center' then
+    targetPos = data.veh:getBBCenter()
+  else
+    local camOffset2 = nx * self.camBase.x + ny * self.camBase.y + nz * self.camBase.z
+    targetPos = data.pos + ref + camOffset2
+  end
+
+  local dir = (ref - back); dir:normalize()
+
+  if self.camResetted ~= 0 then
+    self.lastDataPos = vec3(data.pos)
+  end
+
+  local up = dir:cross(left); up:normalize()
+
+  if self.camResetted ~= 1 then
+    if self.rollSmoothing > 0.0001 then
+      local upSmoothratio = 1 / (data.dt * self.rollSmoothing)
+      up = (1 / (upSmoothratio + 1) * up + (upSmoothratio / (upSmoothratio + 1)) * self.camLastUp); up:normalize()
+    else
+      -- if rolling is disabled, we are always up no matter what ...
+      up:set(vecZ)
+    end
+    dir:set(self.dirSmoothX:getUncapped(dir.x, data.dt*1000), self.dirSmoothY:getUncapped(dir.y, data.dt*1000), self.dirSmoothZ:getUncapped(dir.z, data.dt*1000)); dir:normalize()
+  end
+  self.camLastUp:set(up)
+
+  -- decide on a looking direction
+  -- the reason for this: on reload, the vehicle jumps and the velocity is not correct anymore
+  local vel = (data.pos - self.lastDataPos) / data.dt
+  local velF = vel:dot(dir)
+  local velNF = vel:distance(velF * dir)
+  local forwardVelo = self.fwdVeloSmoother:getUncapped(velF, data.dt)
+  if self.camResetted == 0 then
+    if self.forwardLooking and forwardVelo < -1.5 and math.abs(forwardVelo) > velNF then
+      if self.camRot.x >= 0 then
+        self.camRot:set(self.defaultRotation)
+        self.camRot.x = 180
+      else
+        self.camRot:set(self.defaultRotation)
+        self.camRot.x = -180
+      end
+      self.forwardLooking = false
+    elseif not self.forwardLooking and forwardVelo > 1.5 then
+      self.camRot:set(self.defaultRotation)
+      self.camRot.x = 0
+      self.forwardLooking = true
+    end
+  end
+  self.lastDataPos:set(data.pos)
+
+  rot:set(math.rad(self.camRot.x), math.rad(self.camRot.y), math.rad(self.camRot.z))
+
+  -- smoothing
+  local ratio = 1 / (data.dt * 8)
+  rot.x = 1 / (ratio + 1) * rot.x + (ratio / (ratio + 1)) * self.camLastRot.x
+  rot.y = 1 / (ratio + 1) * rot.y + (ratio / (ratio + 1)) * self.camLastRot.y
+
+  local dist = 1 / (ratio + 1) * self.camDist + (ratio / (ratio + 1)) * self.camLastDist
+
+  local calculatedCamPos = dist * vec3(
+     math.sin(rot.x) * math.cos(rot.y)
+    , math.cos(rot.x) * math.cos(rot.y)
+    , math.sin(rot.y)
   )
 
   local rot_crash= vec3(0,0,0)
@@ -156,54 +211,63 @@ function C:update(data)
 
   local targetPos = self.camBase
 
-  -- Put everything into global coordinate system
-  local targetPos_g = vec3(data.pos) + vec3(targetPos)  -- or getBBCenter, ref?
-  -- Applies vehicle's rotation to the camera.
-  local camPos_v = qdir_cam2vehicle * camPos_R
-  local camPos_g = targetPos_g + camPos_v
-
-  local cam_forwardVector = -(qdir_cam2vehicle * camPos_R):normalized()
-  local qdir_cam2target = quatFromDir(veh_forwardVector, cam_upVector)
-
-
-  -- application. Do NOT change this except for variable names
-  data.res.pos = camPos_g
-  data.res.rot = qdir_cam2target
-  data.res.fov = self.fov
-  data.res.targetPos = targetPos_g
-
-  -- Loop here
-  self.collision:update(data)
-
-  self.prev_veh_accel:set(veh_accel)
-  self.prev_veh_jerk:set(veh_jerk)
-  dump(veh_accel)
-  --dump(vec3(
-  --  veh_jerk:dot(veh_leftVector),
-  --  veh_jerk:dot(veh_forwardVector),
-  --  veh_jerk:dot(veh_backVector)
-  --))
-  self.lastCamRot:set(self.rot)
-  self.lastCamDist = self.dist
+  self.camLastRot:set(rot)
+  self.camLastDist = dist
   self.camResetted = math.max(self.camResetted - 1, 0)
 
-  local function locals()
-  local variables = {}
-  local idx = 1
-  while true do
-    local ln, lv = debug.getlocal(2, idx)
-    if ln ~= nil then
-      variables[ln] = lv
-    else
-      break
-    end
-    idx = 1 + idx
-  end
-  return variables
-end
+    --#region derp_sos
+  --- conventions:
+  --- <variable>__<what it belongs to>_<what space it's in>__<effect name>
+  --- w, v, t, c means world, vehicle, target, camera space respectively.
+  ---
+  --- <effect name> from thereon means the first effect applied, then the next effect that's applied ON TOP OF THAT/DEPENDENT ON THAT, etc etc.
+  ---   e.g ...inputOrbit_...
+  -- TODO: vehicle mass, fov
 
-  --dump(locals())
+  -- TODO: is this necessary
+  local rot__vehicle_w = quatFromDir(
+    -back:normalized(),
+    left:cross(back):normalized()
+  )
 
+  local output         = {
+    dt = data.dt,
+    dtSim = data.dtSim,
+
+    veh = {
+      pos = data.vehPos,
+      rot = rot__vehicle_w,
+      vel = rot__vehicle_w:inversed() * vel,
+      accel = rot__vehicle_w:inversed() * ((vel - data.prevVel) / data.dt),
+    },
+
+    target_v = quatFromAxisAngle(Z, math.pi) * self.offset,
+
+    pan = {
+      yaw = rot.x,
+      pitch = rot.y,
+      radius = dist
+    },
+
+    fov = self.fov
+  }
+
+  -- final filtered, fx'ed camera outputs
+  local cam_res        = self.fxcontrol__derp_sos:calculate(output)
+  camPos               = cam_res.pos
+  qdir_target          = cam_res.rot
+  local fov            = cam_res.fov
+  targetPos            = cam_res.targetPos
+  --#endregion
+
+
+  -- application
+  data.res.pos = camPos
+  data.res.rot = qdir_target
+  data.res.fov = fov
+  data.res.targetPos = targetPos
+
+  self.collision:update(data)
   return true
 end
 
