@@ -2,7 +2,8 @@
 -- If a copy of the bCDDL was not distributed with this
 -- file, You can obtain one at http://beamng.com/bCDDL-1.1.txt
 
-local collision = require('core/cameraModes/collision')
+local vecY = vec3(0,1,0)
+local vecZ = vec3(0,0,1)
 
 local collision = require('core/cameraModes/collision')
 local fxcontrol__derp_sos = require('derp-sos/fxcontrol')
@@ -24,12 +25,10 @@ function C:init()
   self.camLastUp = vec3()
   self.camResetted = 0
 
-  self.sumDt = 0
-
   self.collision = collision()
   self.collision:init()
 
-  --#region derp_sos
+    --#region derp_sos
   self.fxcontrol__derp_sos = fxcontrol__derp_sos()
   self.fxcontrol__derp_sos:init()
   --#endregion
@@ -46,7 +45,7 @@ function C:onVehicleCameraConfigChanged()
     self.defaultRotation = vec3(self.defaultRotation)
     self.defaultRotation.y = -self.defaultRotation.y
   end
-  self.rot = vec3(self.defaultRotation)
+  self.camRot = vec3(self.defaultRotation)
   self.camMinDist = self.distanceMin or 3
   self.distance = self.distance or 5
   self.defaultDistance = self.distance
@@ -58,48 +57,63 @@ function C:onVehicleCameraConfigChanged()
   self.camBase = vec3()
 end
 
-
 function C:onSettingsChanged()
-  -- self.relaxation = settings.getValue('cameraOrbitRelaxation') or 3
-  -- self.rollSmoothing = math.max(settings.getValue('cameraChaseRollSmoothing') or 1, 0.000001)
+  self.relaxation = settings.getValue('cameraOrbitRelaxation') or 3
+  self.rollSmoothing = math.max(settings.getValue('cameraChaseRollSmoothing') or 1, 0.000001)
   self:reset() --TODO is this really necessary?
 end
 
 function C:reset()
-  --prev pos, vel provided by camData
-  self.prev_veh_accel = vec3(0,0,0)
-  self.prev_veh_jerk = vec3(0,0,0)
-
-  self.rot = vec3(self.defaultRotation)
-  self.rot.x = 0
+  self.camRot = vec3(self.defaultRotation)
+  self.camRot.x = 0
+  self.forwardLooking = true
   self.camResetted = 2
   self.relYaw = 0
   self.relPitch = 0
 end
 
+local rot = vec3()
 function C:update(data)
   data.res.collisionCompatible = true
-  self.sumDt = self.sumDt + data.dtSim
+  -- update input
+  local deadzone = 0.5
+  self.relYaw =   clamp(self.relYaw   + 0.15*MoveManager.yawRelative  , -1, 1)
+  self.relPitch = clamp(self.relPitch + 0.15*MoveManager.pitchRelative, -1, 1)
+  local relYawUsed   = self.relYaw
+  local relPitchUsed = self.relPitch
+  if math.abs(relYawUsed)   < deadzone then relYawUsed   = 0 end
+  if math.abs(relPitchUsed) < deadzone then relPitchUsed = 0 end
 
-  -- 
-  -- VEHICLE DATA
-  --
+  local dx = 200*relYawUsed + 100*data.dt*(MoveManager.yawRight - MoveManager.yawLeft)
+  self.camRot.x = 0
+  if not self.forwardLooking then
+    self.camRot.x = -180
+  end
 
-  local refNode  = data.veh:getNodePosition(self.refNodes.ref)
-  local leftNode = data.veh:getNodePosition(self.refNodes.left)
-  local backNode = data.veh:getNodePosition(self.refNodes.back)
+  local triggerValue = 0.05
 
-  local veh_leftVector = (leftNode - refNode):normalized()
-  local veh_backVector = (backNode - refNode):normalized()
-  local veh_upVector = veh_leftVector:cross(veh_backVector):normalized()
+  if dx > triggerValue then
+    self.camRot.x = 90
+  elseif dx < -triggerValue then
+    self.camRot.x = -90
+  end
+  if not self.forwardLooking then
+    self.camRot.x = -self.camRot.x
+  end
 
-  local veh_forwardVector = -veh_backVector:normalized()
+  local dy = 200*relPitchUsed + 100*data.dt*(MoveManager.pitchUp - MoveManager.pitchDown)
+  self.camRot.y = self.defaultRotation.y
+  if dy > triggerValue then
+    self.camRot.y = self.defaultRotation.y + 30
+  elseif dy < -triggerValue then
+    if self.forwardLooking then
+      self.camRot.x = -180
+    else
+      self.camRot.x = 0
+    end
+  end
 
-  -- Do dot product of each one here into whatever unit vector above u want, so as to get the e.g forward, backward velocity.
-  local veh_posit = vec3(data.pos) -- or getBBCenter, refNode?
-  local veh_veloc = vec3(data.vel)
-  local veh_accel = vec3((data.vel - data.prevVel) / data.dtSim)
-  local veh_jerk = vec3((veh_accel - self.prev_veh_accel) / data.dtSim)
+  self.camRot.y = clamp(self.camRot.y, -85, 85)
 
   -- make sure the rotation is never bigger than 2 PI
   if self.camRot.x > 180 then
@@ -127,7 +141,11 @@ function C:update(data)
   local nx = left - ref
   local ny = back - ref
 
-  local cam_offset = vec3(self.offset)
+  if nx:squaredLength() == 0 or ny:squaredLength() == 0 then
+    data.res.pos = data.pos
+    data.res.rot = quatFromDir(vecY, vecZ)
+    return false
+  end
 
   local nz = nx:cross(ny):normalized()
 
@@ -205,11 +223,13 @@ function C:update(data)
     , math.sin(rot.y)
   )
 
-  local rot_crash= vec3(0,0,0)
+  local qdir_heading = quatFromDir(-dir, up)
+  calculatedCamPos = qdir_heading * calculatedCamPos
 
-  local qdir_cam2vehicle = quatFromDir(veh_backVector, cam_upVector)
+  local camPos = calculatedCamPos + targetPos
 
-  local targetPos = self.camBase
+  local dir_target = (targetPos - camPos); dir_target:normalize()
+  local qdir_target = quatFromDir(dir_target, up)
 
   self.camLastRot:set(rot)
   self.camLastDist = dist
