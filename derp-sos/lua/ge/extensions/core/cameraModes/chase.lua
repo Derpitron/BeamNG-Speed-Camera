@@ -259,6 +259,12 @@ function C:update(data)
       rot = rot__vehicle_w,
       vel = rot__vehicle_w:inversed() * vel,
       accel = rot__vehicle_w:inversed() * ((vel - data.prevVel) / data.dt),
+      bb = {
+        center = vec3(be:getObjectOOBBCenterXYZ(data.veh:getID())),
+        left = vec3(be:getObjectOOBBHalfAxisXYZ(data.veh:getID(), 0)),
+        rear = vec3(be:getObjectOOBBHalfAxisXYZ(data.veh:getID(), 1)),
+        up = vec3(be:getObjectOOBBHalfAxisXYZ(data.veh:getID(), 2)),
+      }
     },
 
     target_v = quatFromAxisAngle(Z, math.pi) * self.offset,

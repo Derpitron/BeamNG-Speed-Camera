@@ -1,7 +1,7 @@
 -- licensed under AGPL-3.0-or-later
 -- written by Derpitron
 
---#region tools
+--#region debug tools
 local function drawPoint(point, text, color, origin)
     if origin == nil then origin = vec3() end
 
@@ -53,6 +53,20 @@ local sin, cos, pi, rad = math.sin, math.cos, math.pi, math.rad
 
 --#endregion
 
+--#region smoother library
+
+local prev = {}
+local function delta(val, varname)
+    if prev[varname] == nil then prev[varname] = 0 end
+    local tmp = prev[varname]
+    prev[varname] = val
+    return val - tmp
+end
+
+-- TODO: 3d vector smoother.
+
+--#endregion
+
 -- quaternion and vec3 methods available in beamng engine: beamng/common/mathlib.lua (do NOT use euler angle api here. it is outdated and inconsistent. use quaternions to implement desired rotations in a specified, consistent order of axes.)
 -- function smoothers, filters, etc (signal processing): beamng/common/filters.lua
 
@@ -83,10 +97,16 @@ function C:calculate(input)
             dtSim = 0.0, -- physics dt. = 0 at game pause
 
             veh = {
-                pos = vec3(),  -- position of `ref` node in world
-                rot = quat(),  -- rotation of vehicle in world
-                vel = vec3(),  -- local vehicle velocity
-                accel = vec3() -- local vehicle acceleration
+                pos = vec3(),   -- position of `ref` node in world
+                rot = quat(),   -- rotation of vehicle in world
+                vel = vec3(),   -- local vehicle velocity
+                accel = vec3(), -- local vehicle acceleration
+                bb = {          -- alternative to refNode based regime.
+                    center = vec3(), -- world position of vehicle center node in world
+                    left = vec3(), -- relative to bb.center
+                    rear = vec3(), -- relative to bb.center
+                    up = vec3(), -- relative to bb.center
+                }
             },
 
             target_v = vec3(), -- wrt veh.pos, using the above coordinate axe conventions
@@ -117,12 +137,16 @@ function C:calculate(input)
     local cam_v__pan = cam_t__pan + input.target_v
     --#endregion
 
+    --#region EDITABLE FX
+    -- you may replace ANY term from hereon out.
+
     local cam_w__result = {
         pos = input.veh.pos + (input.veh.rot * cam_v__pan),
         rot = dir_cam_v * input.veh.rot,
         fov = input.fov,
         targetPos = input.veh.pos + (input.veh.rot * input.target_v)
     }
+    --#endregion
     return cam_w__result
 end
 
