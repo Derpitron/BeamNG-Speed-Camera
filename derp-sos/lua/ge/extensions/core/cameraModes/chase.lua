@@ -239,35 +239,32 @@ function C:update(data)
   --- conventions:
   --- <variable>__<what it belongs to>_<what space it's in>__<effect name>
   --- w, v, t, c means world, vehicle, target, camera space respectively.
-  ---
-  --- <effect name> from thereon means the first effect applied, then the next effect that's applied ON TOP OF THAT/DEPENDENT ON THAT, etc etc.
-  ---   e.g ...inputOrbit_...
-  -- TODO: vehicle mass, fov
-
-  -- TODO: is this necessary
   local rot__vehicle_w = quatFromDir(
     -back:normalized(),
     left:cross(back):normalized()
   )
 
-  local output         = {
+  local output = {
     dt = data.dt,
     dtSim = data.dtSim,
 
     veh = {
-      pos = data.vehPos,
-      rot = rot__vehicle_w,
-      vel = rot__vehicle_w:inversed() * vel,
-      accel = rot__vehicle_w:inversed() * ((vel - data.prevVel) / data.dt),
-      bb = {
-        center = vec3(be:getObjectOOBBCenterXYZ(data.veh:getID())),
+      ref = { -- jbeam refnode based vehicle dimensions
+        pos = data.vehPos,
+        rot = rot__vehicle_w,
+        target_offset = quatFromAxisAngle(Z, math.pi) * self.offset,
+
+        vel = rot__vehicle_w:inversed() * vel,
+        accel = rot__vehicle_w:inversed() * ((vel - data.prevVel) / data.dt),
+      },
+
+      bb = {  -- object-oriented bounding box based vehicle dimensions
+        pos = vec3(be:getObjectOOBBCenterXYZ(data.veh:getID())),
         left = vec3(be:getObjectOOBBHalfAxisXYZ(data.veh:getID(), 0)),
         rear = vec3(be:getObjectOOBBHalfAxisXYZ(data.veh:getID(), 1)),
         up = vec3(be:getObjectOOBBHalfAxisXYZ(data.veh:getID(), 2)),
       }
     },
-
-    target_v = quatFromAxisAngle(Z, math.pi) * self.offset,
 
     pan = {
       yaw = rot.x,
