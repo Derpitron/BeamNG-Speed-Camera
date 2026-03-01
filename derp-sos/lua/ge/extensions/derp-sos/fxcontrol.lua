@@ -55,7 +55,7 @@ end
 -- quat, vec3 library:			 beamng/common/mathlib.lua (do NOT use euler angles at all. they're deprecated and implemented inconsistently)
 -- smoothers, signal processing: beamng/common/filters.lua
 
-local vel_smooth_X = newTemporalSmoothingNonLinear()
+local vel_smooth = newTemporalSmoothingNonLinear()
 local vel_smooth_Y = newTemporalSmoothingNonLinear()
 local vel_smooth_Z = newTemporalSmoothingNonLinear()
 
@@ -65,6 +65,8 @@ C.__index = C
 function C:init()
 	print("initialised derp_sos camera")
 end
+
+local t = 0
 
 function C:calculate(input)
 	--#region data schema
@@ -97,15 +99,21 @@ function C:calculate(input)
 			},
 
 			pan = {
-				yaw = rot.x,
-				pitch = rot.y,
-				radius = dist
+				yaw = 0.0,
+				pitch = 0.0,
+				radius = 0.0
 			},
 
 			fov = self.fov
 		}
 	end
 	--#endregion
+	--input.pan.yaw = 136
+	local vel = vel_smooth:getWithRate(input.veh.ref.vel.y, input.dt, 0.8)
+	input.fov = 50 + 0.8*(math.abs(vel))
+	local my_width = 3.1*(2*(input.veh.bb.left:length()))
+	input.pan.radius = my_width/(2*math.tan(rad(input.fov) / 2))
+	t = t + input.dtSim
 
 	--#region FX: pan
 	local cam_t__pan = vec3( -- input orbit
@@ -117,7 +125,7 @@ function C:calculate(input)
 
 	local dir_cam_v = quatFromDir(
 		-cam_t__pan, -- dir
-		Z            -- up
+		Z      -- up
 	)
 	local cam_v__pan = vec3(cam_t__pan + input.veh.ref.target_offset)
 	--#endregion
@@ -125,9 +133,18 @@ function C:calculate(input)
 	--#region EDITABLE FX
 	-- you may replace ANY term from hereon out.
 
+	local veldir = input.veh.ref.rot * input.veh.ref.vel
+	local accdir = input.veh.ref.rot * input.veh.ref.accel
+	if veldir:length() < 1.5 then	veldir = input.veh.ref.rot*Y end
+	veldir.z = 0
+	accdir.z = 0
+	viz.drawVec(veldir:normalized(), "vel", ColorF(0.8,0.8,0,1), input.veh.bb.pos)
+	viz.drawVec(accdir:normalized(), "vel", ColorF(0.8,0,0,1), input.veh.bb.pos)
+	local bouncy_veh_rot = quatFromDir(veldir,Z)
+
 	local cam_w__result = {
-		pos = vec3(input.veh.ref.pos + (input.veh.ref.rot * cam_v__pan)),
-		rot = quat(dir_cam_v * input.veh.ref.rot),
+		pos = vec3(input.veh.ref.pos + (bouncy_veh_rot * cam_v__pan)),
+		rot = quat(dir_cam_v * bouncy_veh_rot),
 		fov = input.fov,
 		targetPos = vec3(input.veh.ref.pos + (input.veh.ref.rot * input.veh.ref.target_offset))
 	}

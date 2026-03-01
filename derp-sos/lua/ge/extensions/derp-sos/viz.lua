@@ -15,7 +15,7 @@ viz.drawPoint = function(point, text, color, origin)
     local point_wrt_origin = origin + point
 
     debugDrawer:drawSphere(point_wrt_origin, 0.05, color, false)
-    debugDrawer:drawText(point_wrt_origin, text, color, false)
+    debugDrawer:drawText(point_wrt_origin, text, ColorF(1,1,1,1), false)
 end
 
 --- draws a straight `color`'ed  line from `origin` to `point` with `text` as label on the point.
