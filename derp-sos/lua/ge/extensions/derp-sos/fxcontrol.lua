@@ -38,6 +38,18 @@ local function delta(val, varname)
 	return val - buffered_prev_val
 end
 
+local function getAngle(q)
+	return 2 * math.acos(q.w)
+end
+
+local function getAxis(q)
+	vec3(
+		q.x / math.sin(getAngle(q)),
+		q.y / math.sin(getAngle(q)),
+		q.z / math.sin(getAngle(q))
+	)
+end
+
 --#endregion
 
 -- quat, vec3 library:			 beamng/common/mathlib.lua (do NOT use euler angles at all. they're deprecated and implemented inconsistently)
@@ -105,7 +117,7 @@ function C:calculate(input)
 
 	local dir_cam_v = quatFromDir(
 		-cam_t__pan, -- dir
-		Z      -- up
+		Z            -- up
 	)
 	local cam_v__pan = vec3(cam_t__pan + input.veh.ref.target_offset)
 	--#endregion
@@ -113,20 +125,11 @@ function C:calculate(input)
 	--#region EDITABLE FX
 	-- you may replace ANY term from hereon out.
 
-	local vel_bb_w = vec3(delta(input.veh.bb.pos, "input.veh.bb.pos") / input.dt)
-	local vel_bb_w_smooth = vec3(
-		vel_smooth_X:getWithRate(vel_bb_w.x, input.dt, 8),
-		vel_smooth_Y:getWithRate(vel_bb_w.y, input.dt, 8),
-		vel_smooth_Z:getWithRate(vel_bb_w.z, input.dt, 8)
-	)
-	if vel_bb_w_smooth:length() < 5 then vel_bb_w_smooth = vec3(-input.veh.bb.rear) end
-	local bouncy_veh_rot = quatFromDir(vel_bb_w_smooth, Z)
-
 	local cam_w__result = {
-		pos = input.veh.ref.pos + (bouncy_veh_rot * cam_v__pan),
-		rot = dir_cam_v * bouncy_veh_rot,
+		pos = vec3(input.veh.ref.pos + (input.veh.ref.rot * cam_v__pan)),
+		rot = quat(dir_cam_v * input.veh.ref.rot),
 		fov = input.fov,
-		targetPos = input.veh.ref.pos + (input.veh.ref.rot * input.veh.ref.target_offset)
+		targetPos = vec3(input.veh.ref.pos + (input.veh.ref.rot * input.veh.ref.target_offset))
 	}
 	--#endregion
 	return cam_w__result
@@ -141,3 +144,4 @@ return function(...)
 	o:init()
 	return o
 end
+--#endregion

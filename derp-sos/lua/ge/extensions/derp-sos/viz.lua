@@ -29,7 +29,7 @@ viz.drawVec = function(point, text, color, origin)
     origin = origin or vec3()
     viz.drawPoint(point, text, color, origin)
     debugDrawer:drawSphere(origin, 0.05, ColorF(0, 0, 0, 1), false)
-    debugDrawer:drawLine(origin, point, color, 0.04)
+    debugDrawer:drawLine(origin, origin + point, color, 0.04)
 end
 
 X = vec3(1, 0, 0)
